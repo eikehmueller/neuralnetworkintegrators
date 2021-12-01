@@ -31,6 +31,11 @@ class TimeIntegrator(object):
         :arg steps: Number of integration steps
         '''
         pass
+    
+    def energy(self):
+        '''Return the energy of the underlying dynamical system for
+        the current position and velocity'''
+        return self.dynamical_system.energy(self.x,self.v)
 
 class ForwardEulerIntegrator(TimeIntegrator):
     def __init__(self,dynamical_system,dt):
