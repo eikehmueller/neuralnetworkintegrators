@@ -13311,8 +13311,8 @@ ________________________________________________________________________________
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>The following data generator class can be used to construct training data samples of the form $(X_j,y_j)$ where</p>
 $$
-X_j = q_j^{(0)},q_j^{(\Delta t)},\dots,q_j^{(t+(S-1)\Delta t)},\qquad\qquad y_j = q_j^{(t+S\Delta t)}.
-$$<p>Here $q_j^{(0)}$ is a randomly chosen initial condition and the states $q_j^{(\Delta t)},\dots,q_j^{(t+(S-1)\Delta t)}, q_j^{(t+S\Delta t)}$ are generated with a training generator (=Verlet) that is run with a smaller timestep.</p>
+X_j = q_j^{(0)},q_j^{(\Delta t)},\dots,q_j^{((S-1)\Delta t)},\qquad\qquad y_j = q_j^{(S\Delta t)}.
+$$<p>Here $q_j^{(0)}$ is a randomly chosen initial condition and the states $q_j^{(\Delta t)},q_j^{(2\Delta t)},\dots,q_j^{((S-1)\Delta t)}, q_j^{(S\Delta t)}$ are generated with a training generator (=Verlet) that is run with a smaller timestep.</p>
 
 </div>
 </div>
