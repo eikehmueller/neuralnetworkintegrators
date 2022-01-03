@@ -3,8 +3,6 @@
 This code implements an s-step method for integrating dynamical systems of the form dy/dt = N(y(t)). Given the solution y(t) at s previous points in time, the value of the solution is predicted at the next timestep. For this, the correction is parametrised with a neural network, following the ideas in
 [https://arxiv.org/abs/2004.06493](https://arxiv.org/abs/2004.06493). Currently the code uses a simple dense network (instead of the LSTM architecture proposed by the authos) and is trained with a simple Verlet integrator is used for training.
 
-See [Jupyter notebook](http://htmlpreview.github.io/?https://bitbucket.org/em459/neuralnetworkintegrators/src/master/NNIntegrator.html) for a html version of the code.
-
 ### Results
 The following plot shows the numerical solution, obtained both with a standard Velocity Verlet integrator and a four-step neural network based integrator. The timestep size of the latter is 20x larger, which makes the NN-based integrator potentially more efficient.
 ![Comparison of Velocity Verlet and neural network integrator](solution.png)
