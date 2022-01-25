@@ -1,5 +1,8 @@
 from matplotlib import pyplot as plt
+import ctypes
+import subprocess
 import numpy as np
+import string
 
 class DynamicalSystem(object):
     def __init__(self,dim,mass):
@@ -92,7 +95,11 @@ class HarmonicOscillator(DynamicalSystem):
         return 0.5*self.mass*v[0]**2 + 0.5*self.k_spring*x[0]**2
 
 class LennartJonesSystem(DynamicalSystem):
-    def __init__(self,mass,npart,boxsize,epsilon_pot=1.0,epsilon_kin=1.0,rcutoff=3.0):
+    def __init__(self,mass,npart,boxsize,
+                 epsilon_pot=1.0,
+                 epsilon_kin=1.0,
+                 rcutoff=3.0,
+                 fast_force=True):
         '''Set of particles interacting via the truncated Lennart-Jones
         potential V(r) defined by
 
@@ -123,6 +130,7 @@ class LennartJonesSystem(DynamicalSystem):
         :arg epsilon_kin: Scale of potential energy
         :arg epsilon_pot: Scale of kinetic enegry
         :arg rcutoff: Cutoff distance for potential
+        :arg fast_force: Evaluate force using compiled C code
         '''
         super().__init__(2*npart,mass)
         # Set parameters of dynamical system
@@ -136,6 +144,89 @@ class LennartJonesSystem(DynamicalSystem):
         assert self.rcutoff < self.boxsize
         # Shift in potential energy to ensure that V(r_c) = 0
         self.Vshift = 4.*self.epsilon_pot*(1./self.rcutoff**12-1./self.rcutoff**6)
+        self.fast_force=fast_force
+        if (self.fast_force):
+            c_sourcecode = string.Template('''
+            void calculate_lj_force(double* x, double* force) {
+                const int npart = $NPART;
+                const double boxsize = $BOXSIZE;
+                const double rcutoff2 = $RCUTOFF2;
+                const double fscal = 24.*$EPSILON_POT/$MASS;
+                for (int j=0;j<npart;++j) {
+                    force[2*j] = 0.0;
+                    force[2*j+1] = 0.0;
+                    for (int k=0;k<npart;++k) {
+                        if (j==k) continue;
+                        for (int xoff=0;xoff<=1;++xoff) {
+                            for (int yoff=0;yoff<=1;++yoff) {
+                                double dx = x[2*k]-x[2*j] + boxsize*xoff;
+                                double dy = x[2*k+1]-x[2*j+1] + boxsize*yoff;
+                                double nrm2 = dx*dx + dy*dy;
+                                if  (nrm2 <= rcutoff2) {
+                                    double invnrm2 = 1./nrm2;
+                                    double invnrm4 = invnrm2*invnrm2;
+                                    double invnrm6 = invnrm4*invnrm2;
+                                    double invnrm8 = invnrm4*invnrm4;
+                                    double Fabs = fscal*invnrm8*(2.*invnrm6-1.);
+                                    force[2*j] -= Fabs*dx;
+                                    force[2*j+1] -= Fabs*dy;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            double calculate_lj_potential_energy(double* x) {
+                const int npart = $NPART;
+                const double boxsize = $BOXSIZE;
+                const double rcutoff2 = $RCUTOFF2;
+                const double Vscal = 4.*$EPSILON_POT;
+                const double Vshift = $VSHIFT;
+                double Vpot = 0.0;
+                for (int j=0;j<npart;++j) {
+                    for (int k=0;k<j;++k) {
+                        for (int xoff=0;xoff<=1;++xoff) {
+                            for (int yoff=0;yoff<=1;++yoff) {
+                                double dx = x[2*k]-x[2*j] + boxsize*xoff;
+                                double dy = x[2*k+1]-x[2*j+1] + boxsize*yoff;
+                                double nrm2 = dx*dx + dy*dy;
+                                if (nrm2 <= rcutoff2) {
+                                    double invnrm2 = 1./nrm2;
+                                    double invnrm6 = invnrm2*invnrm2*invnrm2;
+                                    Vpot += Vscal*invnrm6*(invnrm6-1.);
+                                    Vpot -= Vshift;
+                                }
+                            }
+                        }
+                    }
+                }
+                return Vpot;
+            }
+            ''').substitute(NPART=self.npart,
+                            BOXSIZE=self.boxsize,
+                            RCUTOFF2=self.rcutoff**2,
+                            EPSILON_POT=self.epsilon_pot,
+                            MASS=self.mass,
+                            VSHIFT=self.Vshift)
+            with open('calculate_lj_force.c','w') as f:
+                print (c_sourcecode,file=f)
+            # Compile source code (might have to adapt for different compiler)
+            subprocess.run(['gcc',
+                            '-fPIC','-shared','-o',
+                            'calculate_lj_force.so',
+                            'calculate_lj_force.c'])
+            so_file = './calculate_lj_force.so'
+            self.calculate_lj_force = ctypes.CDLL(so_file).calculate_lj_force
+            self.calculate_lj_force.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
+                                    flags="C_CONTIGUOUS"),
+             np.ctypeslib.ndpointer(ctypes.c_double,
+                                    flags="C_CONTIGUOUS")]
+            self.calculate_lj_potential_energy = ctypes.CDLL(so_file).calculate_lj_potential_energy
+            self.calculate_lj_potential_energy.restype = ctypes.c_double
+            self.calculate_lj_potential_energy.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
+                                    flags="C_CONTIGUOUS")]
+
 
     def compute_scaled_force(self,x,force):
         '''Set the entries force[:] of the force vector
@@ -143,20 +234,24 @@ class LennartJonesSystem(DynamicalSystem):
         :arg x: Particle position x (2*npart-dimensional array)
         :arg force: Resulting force vector (2*npart-dimensional array)
         '''
-        force[:] = 0.0
-        for j in range(self.npart):
-            for k in range(j):
-                for xboxoffset in (-1,0,+1):
-                    for yboxoffset in (-1,0,+1):
-                        dx = x[2*k:2*k+2]-x[2*j:2*j+2]
-                        dx[0] += self.boxsize*xboxoffset
-                        dx[1] += self.boxsize*yboxoffset
-                        nrm2 = dx[0]**2 + dx[1]**2
-                        if  nrm2 <= self.rcutoff**2:
-                            invnrm2 = 1./nrm2
-                            Fabs = 24.*self.epsilon_pot*invnrm2**4*(2.*invnrm2**3 - 1.0)
-                            force[2*j:2*j+2] += Fabs*dx[:]
-                            force[2*k:2*k+2] -= Fabs*dx[:]
+        if (self.fast_force):
+            self.calculate_lj_force(x,force)
+        else:
+            force[:] = 0.0
+            for j in range(self.npart):
+                for k in range(self.npart):
+                    if j==k:
+                        continue
+                    for xboxoffset in (-1,0,+1):
+                        for yboxoffset in (-1,0,+1):
+                            dx = x[2*k:2*k+2]-x[2*j:2*j+2]
+                            dx[0] += self.boxsize*xboxoffset
+                            dx[1] += self.boxsize*yboxoffset
+                            nrm2 = dx[0]**2 + dx[1]**2
+                            if  nrm2 <= self.rcutoff**2:
+                                invnrm2 = 1./nrm2
+                                Fabs = 24.*self.epsilon_pot*invnrm2**4*(2.*invnrm2**3 - 1.0)
+                                force[2*j:2*j+2] -= Fabs/self.mass*dx[:]
 
     def set_random_state(self,x,v):
         '''Draw position and velocity randomly
@@ -164,7 +259,8 @@ class LennartJonesSystem(DynamicalSystem):
         The velocities are drawn from a normal distribution with mean zero and
         variance chosen such that <1/2*m*v^2> = E_kin. The particles are
         distributed randomly inside the box, such that the distance between any
-        two particles (including their periodic copies) is at least 1.
+        two particles (including their periodic copies) is at least the
+        distance at which the potential is minimal.
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
@@ -190,7 +286,7 @@ class LennartJonesSystem(DynamicalSystem):
                 for k in range(j):
                     diff = positions[j,:]-positions[k,:]
                     distance = np.linalg.norm(diff)
-                    accepted = accepted and (distance > 1.0)
+                    accepted = accepted and (distance > 2.**(1./6.))
         x[:] = positions[:self.npart,:].flatten()
         # Draw velocities such that <1/2*m*v^2> ~ \epsilon_kin
         sigma_v = np.sqrt(2.*self.epsilon_kin/self.mass)
@@ -230,19 +326,22 @@ class LennartJonesSystem(DynamicalSystem):
         :arg v: Velocities (d-dimensional array)
         '''
         Vkin = 0.5*self.mass*np.dot(v,v)
-        Vpot = 0.0
-        for j in range(self.npart):
-            for k in range(j):
-                for xboxoffset in (-1,0,+1):
-                    for yboxoffset in (-1,0,+1):
-                        dx = x[2*k:2*k+2]-x[2*j:2*j+2]
-                        dx[0] += self.boxsize*xboxoffset
-                        dx[1] += self.boxsize*yboxoffset
-                        nrm2 = dx[0]**2 + dx[1]**2
-                        if  nrm2 <= self.rcutoff**2:
-                            invnrm6 = 1./nrm2**3
-                            Vpot += 4.*self.epsilon_pot*invnrm6*(invnrm6-1.)
-                            Vpot -= self.Vshift
+        if (self.fast_force):
+            Vpot = self.calculate_lj_potential_energy(x)
+        else:
+            Vpot = 0.0
+            for j in range(self.npart):
+                for k in range(j):
+                    for xboxoffset in (-1,0,+1):
+                        for yboxoffset in (-1,0,+1):
+                            dx = x[2*k:2*k+2]-x[2*j:2*j+2]
+                            dx[0] += self.boxsize*xboxoffset
+                            dx[1] += self.boxsize*yboxoffset
+                            nrm2 = dx[0]**2 + dx[1]**2
+                            if  nrm2 <= self.rcutoff**2:
+                                invnrm6 = 1./nrm2**3
+                                Vpot += 4.*self.epsilon_pot*invnrm6*(invnrm6-1.)
+                                Vpot -= self.Vshift
         return Vkin + Vpot
 
     def apply_constraints(self,x):
