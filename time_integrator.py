@@ -12,6 +12,7 @@ class TimeIntegrator(object):
         self.x = np.zeros(dynamical_system.dim)
         self.v = np.zeros(dynamical_system.dim)
         self.force = np.zeros(dynamical_system.dim)
+        self.label = None
 
     def set_state(self,x,v):
         '''Set the current state of the integrator to a specified
@@ -31,7 +32,7 @@ class TimeIntegrator(object):
         :arg steps: Number of integration steps
         '''
         pass
-    
+
     def energy(self):
         '''Return the energy of the underlying dynamical system for
         the current position and velocity'''
@@ -48,6 +49,7 @@ class ForwardEulerIntegrator(TimeIntegrator):
         :arg dt: time step size
         '''
         super().__init__(dynamical_system,dt)
+        self.label = 'ForwardEuler'
 
     def integrate(self,n_steps):
         '''Carry out n_step timesteps, starting from the current set_state
@@ -57,6 +59,7 @@ class ForwardEulerIntegrator(TimeIntegrator):
         '''
         for k in range(n_steps):
             self.x[:] += self.dt*self.v[:]
+            self.dynamical_system.apply_constraints(self.x)
             self.v[:] += self.dt*self.force[:]
             # Compute force at next timestep
             self.dynamical_system.compute_scaled_force(self.x,self.force)
@@ -72,6 +75,7 @@ class VerletIntegrator(TimeIntegrator):
         :arg dt: time step size
         '''
         super().__init__(dynamical_system,dt)
+        self.label = 'Verlet'
 
     def integrate(self,n_steps):
         '''Carry out n_step timesteps, starting from the current set_state
@@ -81,6 +85,7 @@ class VerletIntegrator(TimeIntegrator):
         '''
         for k in range(n_steps):
             self.x[:] += self.dt*self.v[:] + 0.5*self.dt**2*self.force[:]
+            self.dynamical_system.apply_constraints(self.x)
             self.v[:] += 0.5*self.dt*self.force[:]
             self.dynamical_system.compute_scaled_force(self.x,self.force)
             self.v[:] += 0.5*self.dt*self.force[:]
