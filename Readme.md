@@ -1,7 +1,7 @@
 ## Neural-network based integrator for dynamical systems
 
-This code implements an s-step method for integrating dynamical systems of the form dy/dt = N(y(t)). Given the solution y(t) at s previous points in time, the value of the solution is predicted at the next timestep. For this, the correction is parametrised with a neural network, following the ideas in
-[https://arxiv.org/abs/2004.06493](https://arxiv.org/abs/2004.06493). Currently the code uses a simple dense network (instead of the LSTM architecture proposed by the authors) and a simple Verlet integrator is used for training.
+This code implements both an s-step method for integrating dynamical systems of the form dy/dt = N(y(t)) and a single-step method with a Hamiltonian neural network model. Given the solution y(t) at s previous points in time, the value of the solution is predicted at the next timestep. For this, the correction is parametrised with a neural network, following the ideas in
+[https://arxiv.org/abs/2004.06493](https://arxiv.org/abs/2004.06493) and [https://arxiv.org/abs/1906.01563](https://arxiv.org/abs/1906.01563). The code uses either a simple dense network or a LSTM architecture. A simple Verlet integrator is used for training.
 
 ### Results
 The following plot shows the numerical solution, obtained both with a standard Velocity Verlet integrator and a four-step neural network based integrator. The timestep size of the latter is 20x larger, which makes the NN-based integrator potentially more efficient.
@@ -15,4 +15,4 @@ Note that the RMSE error can not be reduced below the accuracy of the Verlet int
 ### Code structure
 The main code is contained in the Python notebook `NNIntegrator.ipynb`, which implements the neural network model and training loop.
 
-Classes for dynamical systems are implemented in `dynamical_system.py`, and several classic integrators (forward Euler, Velocity Verlet) are implemented in `time_integrator.py`. Currently, a simple one-dimensional harmonic oscillator is implemented.
+Classes for dynamical systems are implemented in `dynamical_system.py`, and several classic integrators (forward Euler, Velocity Verlet) are implemented in `time_integrator.py`. Currently, a simple one-dimensional harmonic oscillator is implemented. The file `models.py` contains a tensorflow model to implement a single Stoermer-Verlet step, representing the separable Hamiltonian by two dense neural networks.
