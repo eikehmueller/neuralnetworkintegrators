@@ -28,8 +28,8 @@ class VerletModel(keras.Model):
         self.dt = dt
         self.V_pot_layers = V_pot_layers
         self.T_kin_layers = T_kin_layers
-        self.V_pot_final_layer = keras.layers.Dense(self.dim//2)
-        self.T_kin_final_layer = keras.layers.Dense(self.dim//2)
+        self.V_pot_final_layer = keras.layers.Dense(self.dim//2,use_bias=False)
+        self.T_kin_final_layer = keras.layers.Dense(self.dim//2,use_bias=False)
     
     #@tf.function
     def V_pot(self,q):
