@@ -28,6 +28,8 @@ class VerletModel(keras.Model):
         self.dt = dt
         self.V_pot_layers = V_pot_layers
         self.T_kin_layers = T_kin_layers
+        self.V_pot_final_layer = keras.layers.Dense(self.dim//2)
+        self.T_kin_final_layer = keras.layers.Dense(self.dim//2)
     
     #@tf.function
     def V_pot(self,q):
@@ -37,8 +39,10 @@ class VerletModel(keras.Model):
         '''
         x = q
         for layer in self.V_pot_layers:
-            x = layer(x)            
+            x = layer(x)
+        x = self.V_pot_final_layer(x)
         return x
+        
         
     #@tf.function
     def T_kin(self,p):
@@ -49,7 +53,9 @@ class VerletModel(keras.Model):
         x = p
         for layer in self.T_kin_layers:
             x = layer(x)
+        x = self.T_kin_final_layer(x)
         return x
+        
 
     @tf.function
     def verlet_step(self,q_n,p_n):
@@ -75,7 +81,7 @@ class VerletModel(keras.Model):
         
         return q_n, p_n
 
-    def call(self, inputs, training=False):
+    def call(self, inputs):
         '''Evaluate model
         
         Split the inputs = (q_n,p_n) into position and momentum and 
