@@ -49,7 +49,7 @@ class VerletModel(keras.Model):
         '''Evaluate kinetic energy network T(p)
         
         :arg p: momentum p at which to evaluate the kinetic energy
-        '''        
+        '''
         x = p
         for layer in self.T_kin_layers:
             x = layer(x)
@@ -100,5 +100,5 @@ class VerletModel(keras.Model):
         p_old = tf.stack(qp_old[self.dim//2:],axis=-1)
         q_new, p_new = self.verlet_step(q_old,p_old)        
         # Combine result of Verlet step into tensor of correct size
-        outputs = tf.stack([q_new,p_new],axis=-1)        
+        outputs = tf.concat([q_new,p_new],axis=-1)
         return outputs
