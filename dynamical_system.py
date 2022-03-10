@@ -55,6 +55,18 @@ class DynamicalSystem(object):
         :arg x: Positions (d-dimensional array)
         '''
         pass
+    
+    def forward_map(self,x0,v0,t):
+        '''Exact forward map
+        
+        Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
+        This will only be implemented if the specific dynamical system has an analytical solution
+        
+        :arg x0: initial position x(0)
+        :arg v0: initial velocity v(0)
+        :arg t: final time
+        '''
+        raise NotImplementedError("Dynamical system has no exact solution.")
 
 class HarmonicOscillator(DynamicalSystem):
     def __init__(self,mass,k_spring):
@@ -93,6 +105,30 @@ class HarmonicOscillator(DynamicalSystem):
         :arg v: Velocities (d-dimensional array)
         '''
         return 0.5*self.mass*v[0]**2 + 0.5*self.k_spring*x[0]**2
+    
+    def forward_map(self,x0,v0,t):
+        '''Exact forward map
+        
+        Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
+        
+        For this use:
+        
+        x(t) = x(0)*cos(omega*t) + omega*v(0)*sin(omega*t)
+        v(t) = -x(0)/omega*sin(omega*t) + v(0)*cos(omega*t)
+        
+        with omegae = sqrt(k/m)
+        
+        :arg x0: initial position x(0)
+        :arg v0: initial velocity v(0)
+        :arg t: final time
+        '''
+        omega = np.sqrt(self.k_spring/self.mass)
+        cos_omegat = np.cos(omega*t)
+        sin_omegat = np.sin(omega*t)
+        x = np.array(x0[0]*cos_omegat + v0[0]/omega*sin_omegat)
+        v = np.array(-x0[0]*omega*sin_omegat + v0[0]*cos_omegat)
+        return x, v
+
 
 class LennartJonesSystem(DynamicalSystem):
     def __init__(self,mass,npart,boxsize,

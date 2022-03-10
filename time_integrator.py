@@ -38,6 +38,7 @@ class TimeIntegrator(object):
         the current position and velocity'''
         return self.dynamical_system.energy(self.x,self.v)
 
+
 class ForwardEulerIntegrator(TimeIntegrator):
     def __init__(self,dynamical_system,dt):
         '''Forward Euler integrator given by
@@ -89,3 +90,23 @@ class VerletIntegrator(TimeIntegrator):
             self.v[:] += 0.5*self.dt*self.force[:]
             self.dynamical_system.compute_scaled_force(self.x,self.force)
             self.v[:] += 0.5*self.dt*self.force[:]
+
+class ExactIntegrator(TimeIntegrator):
+    def __init__(self,dynamical_system,dt):
+        '''Exact integrator
+        
+        Integrate the equations of motion exactly, if the dynamical system supports this.
+
+        :arg dynamical_system: Dynamical system to be integrated
+        :arg dt: time step size
+        '''
+        super().__init__(dynamical_system,dt)
+        self.label = 'Exact'
+
+    def integrate(self,n_steps):
+        '''Carry out n_step timesteps, starting from the current set_state
+        and updating this
+
+        :arg steps: Number of integration steps
+        '''
+        self.x[:], self.v[:] = self.dynamical_system.forward_map(self.x[:],self.v[:],n_steps*self.dt)
