@@ -87,8 +87,8 @@ class VerletIntegrator(TimeIntegrator):
             c_sourcecode = string.Template('''
             void velocity_verlet(double* x, double* v, int nsteps) {
                 double a[$DIM];
-                for (int j=0;j<$DIM;++j) a[j] = 0;
                 for (int k=0;k<nsteps;++k) {
+                    for (int j=0;j<$DIM;++j) a[j] = 0;
                     $ACCELERATION_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
                         x[j] += $DT*v[j] + 0.5*$DT*$DT*a[j];
