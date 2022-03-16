@@ -80,6 +80,9 @@ class HarmonicOscillator(DynamicalSystem):
         '''
         super().__init__(1,mass)
         self.k_spring = k_spring
+        self.acceleration_update_code = string.Template('''
+        a[0] += -($KSPRING/$MASS)*x[0];
+        ''').substitute(KSPRING=self.k_spring,MASS=self.mass)
 
     def compute_scaled_force(self,x,force):
         '''Set the entry force[0] of the force vector

@@ -1,4 +1,7 @@
 import numpy as np
+import string
+import subprocess
+import ctypes
 
 class TimeIntegrator(object):
     def __init__(self,dynamical_system,dt):
@@ -77,6 +80,40 @@ class VerletIntegrator(TimeIntegrator):
         '''
         super().__init__(dynamical_system,dt)
         self.label = 'Verlet'
+        self.fast_code = hasattr(self.dynamical_system,'acceleration_update_code')
+        if self.fast_code:
+            c_sourcecode = string.Template('''
+            void velocity_verlet(double* x, double* v, int nsteps) {
+                double a[$DIM];
+                for (int j=0;j<$DIM;++j) a[j] = 0;
+                for (int k=0;k<nsteps;++k) {
+                    $ACCELERATION_UPDATE_CODE
+                    for (int j=0;j<$DIM;++j) {
+                        x[j] += $DT*v[j] + 0.5*$DT*$DT*a[j];
+                    }
+                    $ACCELERATION_UPDATE_CODE
+                    for (int j=0;j<$DIM;++j) {
+                        v[j] += 0.5*$DT*a[j];
+                    }
+                }
+            }
+            ''').substitute(DIM=self.dynamical_system.dim,
+                            DT=self.dt,
+                            ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code)
+            with open('velocity_verlet.c','w') as f:
+                print (c_sourcecode,file=f)
+            # Compile source code (might have to adapt for different compiler)
+            subprocess.run(['gcc',
+                            '-fPIC','-shared','-o',
+                            'velocity_verlet.so',
+                            'velocity_verlet.c'])
+            so_file = './velocity_verlet.so'
+            self.c_velocity_verlet = ctypes.CDLL(so_file).velocity_verlet
+            self.c_velocity_verlet.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
+                                               flags="C_CONTIGUOUS"),
+                                               np.ctypeslib.ndpointer(ctypes.c_double,
+                                               flags="C_CONTIGUOUS"),
+                                               np.ctypeslib.c_intp]
 
     def integrate(self,n_steps):
         '''Carry out n_step timesteps, starting from the current set_state
@@ -84,12 +121,16 @@ class VerletIntegrator(TimeIntegrator):
 
         :arg steps: Number of integration steps
         '''
-        for k in range(n_steps):
-            self.x[:] += self.dt*self.v[:] + 0.5*self.dt**2*self.force[:]
-            self.dynamical_system.apply_constraints(self.x)
-            self.v[:] += 0.5*self.dt*self.force[:]
-            self.dynamical_system.compute_scaled_force(self.x,self.force)
-            self.v[:] += 0.5*self.dt*self.force[:]
+        if self.fast_code:
+            self.c_velocity_verlet(self.x,self.v,n_steps)
+        else:
+            for k in range(n_steps):
+                self.x[:] += self.dt*self.v[:] + 0.5*self.dt**2*self.force[:]
+                self.dynamical_system.apply_constraints(self.x)
+                self.v[:] += 0.5*self.dt*self.force[:]
+                self.dynamical_system.compute_scaled_force(self.x,self.force)
+                self.v[:] += 0.5*self.dt*self.force[:]
+        
 
 class ExactIntegrator(TimeIntegrator):
     def __init__(self,dynamical_system,dt):
