@@ -80,6 +80,7 @@ class HarmonicOscillator(DynamicalSystem):
         '''
         super().__init__(1,mass)
         self.k_spring = k_spring
+        # C-code snipped for computing the acceleration update
         self.acceleration_update_code = string.Template('''
         a[0] += -($KSPRING/$MASS)*x[0];
         ''').substitute(KSPRING=self.k_spring,MASS=self.mass)

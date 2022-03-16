@@ -80,7 +80,9 @@ class VerletIntegrator(TimeIntegrator):
         '''
         super().__init__(dynamical_system,dt)
         self.label = 'Verlet'
+        # Check whether dynamical system has a C-code snippet for updating the acceleration
         self.fast_code = hasattr(self.dynamical_system,'acceleration_update_code')
+        # If this is the case, auto-generate fast C code for the Velocity Verlet update
         if self.fast_code:
             c_sourcecode = string.Template('''
             void velocity_verlet(double* x, double* v, int nsteps) {
