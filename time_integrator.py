@@ -102,14 +102,15 @@ class VerletIntegrator(TimeIntegrator):
             ''').substitute(DIM=self.dynamical_system.dim,
                             DT=self.dt,
                             ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code)
-            with open('velocity_verlet.c','w') as f:
+            so_file = './velocity_verlet_'+str(id(self))+'.so'
+            source_file = './velocity_verlet_'+str(id(self))+'.c'
+            with open(source_file,'w') as f:
                 print (c_sourcecode,file=f)
             # Compile source code (might have to adapt for different compiler)
             subprocess.run(['gcc',
                             '-fPIC','-shared','-o',
-                            'velocity_verlet.so',
-                            'velocity_verlet.c'])
-            so_file = './velocity_verlet.so'
+                            so_file,
+                            source_file])
             self.c_velocity_verlet = ctypes.CDLL(so_file).velocity_verlet
             self.c_velocity_verlet.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
                                                flags="C_CONTIGUOUS"),
