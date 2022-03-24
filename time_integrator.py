@@ -2,6 +2,7 @@ import numpy as np
 import string
 import subprocess
 import ctypes
+import hashlib
 
 class TimeIntegrator(object):
     def __init__(self,dynamical_system,dt):
@@ -102,8 +103,11 @@ class VerletIntegrator(TimeIntegrator):
             ''').substitute(DIM=self.dynamical_system.dim,
                             DT=self.dt,
                             ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code)
-            so_file = './velocity_verlet_'+str(id(self))+'.so'
-            source_file = './velocity_verlet_'+str(id(self))+'.c'
+            sha = hashlib.md5()
+            sha.update(c_sourcecode.encode())
+            filestem = './velocity_verlet_'+sha.hexdigest()
+            so_file = filestem+'.so'
+            source_file = filestem+'.c'
             with open(source_file,'w') as f:
                 print (c_sourcecode,file=f)
             # Compile source code (might have to adapt for different compiler)
