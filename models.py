@@ -31,7 +31,31 @@ class VerletModel(keras.Model):
         self.V_pot_final_layer = keras.layers.Dense(self.dim//2,use_bias=False)
         self.T_kin_final_layer = keras.layers.Dense(self.dim//2,use_bias=False)
     
-    #@tf.function
+    def set_weights(self,V_pot_layer_weights,T_kin_layer_weights):
+        '''Set weights of layers in energy networks
+        
+        :arg V_pot_layer_weights: dictionary with weights of layers in potential energy network
+        :arg T_kin_layer_weights: dictionary with weights of layers in kinetic energy network
+        '''
+        for layer in self.V_pot_layers:
+            try:
+                layer.set_weights(V_pot_layer_weights[layer.name])
+            except:
+                pass
+        try:
+            self.V_pot_final_layer.set_weights(V_pot_layer_weights['final'])
+        except:
+            pass
+        for layer in self.T_kin_layers:
+            try:
+                layer.set_weights(T_kin_layer_weights[layer.name])
+            except:
+                pass
+        try:
+            self.T_kin_final_layer.set_weights(T_kin_layer_weights['final'])
+        except:
+            pass
+    
     def V_pot(self,q):
         '''Evaluate potential energy network V(q)
         
@@ -43,8 +67,6 @@ class VerletModel(keras.Model):
         x = self.V_pot_final_layer(x)
         return x
         
-        
-    #@tf.function
     def T_kin(self,p):
         '''Evaluate kinetic energy network T(p)
         
