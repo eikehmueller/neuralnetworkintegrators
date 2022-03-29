@@ -1,10 +1,10 @@
+from abc import ABC, abstractmethod
 from matplotlib import pyplot as plt
 import ctypes
 import subprocess
 import numpy as np
-import string
 
-class DynamicalSystem(object):
+class DynamicalSystem(ABC):
     def __init__(self,dim,mass):
         '''Abstract base class for a dynamical system
 
@@ -21,6 +21,7 @@ class DynamicalSystem(object):
         self.dim = dim
         self.mass = mass
 
+    @abstractmethod
     def compute_scaled_force(self,x,v,force):
         '''Store the forces scaled by inverse mass in the vector
         such that force[j] = F_j(x)/m_j
@@ -29,8 +30,9 @@ class DynamicalSystem(object):
         :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (d-dimensional array)
         '''
-        pass
+        ...
 
+    @abstractmethod
     def set_random_state(self,x,v):
         '''Set the position x and v to random values. This will be used
         during the training stage to pick a suitable set of initial values
@@ -39,9 +41,9 @@ class DynamicalSystem(object):
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
         '''
-        pass
+        ...
 
-
+    @abstractmethod
     def energy(self,x,v):
         '''Return the total energy for given positions and velocities
 
@@ -82,9 +84,9 @@ class HarmonicOscillator(DynamicalSystem):
         super().__init__(1,mass)
         self.k_spring = k_spring
         # C-code snipped for computing the acceleration update
-        self.acceleration_update_code = string.Template('''
-        a[0] += -($KSPRING/$MASS)*x[0];
-        ''').substitute(KSPRING=self.k_spring,MASS=self.mass)
+        self.acceleration_update_code = '''
+        a[0] += -({kspring}/{mass})*x[0];
+        '''.format(kspring=self.k_spring,mass=self.mass)
 
     def compute_scaled_force(self,x,v,force):
         '''Set the entry force[0] of the force vector
@@ -269,11 +271,11 @@ class LennartJonesSystem(DynamicalSystem):
             self.calculate_lj_potential_energy.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
                                     flags="C_CONTIGUOUS")]
 
-
-    def compute_scaled_force(self,x,force):
+    def compute_scaled_force(self,x,v,force):
         '''Set the entries force[:] of the force vector
 
         :arg x: Particle position x (2*npart-dimensional array)
+        :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (2*npart-dimensional array)
         '''
         if (self.fast_force):
