@@ -85,9 +85,19 @@ class VerletIntegrator(TimeIntegrator):
         self.fast_code = hasattr(self.dynamical_system,'acceleration_update_code')
         # If this is the case, auto-generate fast C code for the Velocity Verlet update
         if self.fast_code:
+            if self.dynamical_system.acceleration_preamble_code:
+                preamble = self.dynamical_system.acceleration_preamble_code
+            else:
+                preamble = ''
+            if self.dynamical_system.acceleration_header_code:
+                header = self.dynamical_system.acceleration_header_code
+            else:
+                header = ''
             c_sourcecode = string.Template('''
+            $ACCELERATION_HEADER_CODE
             void velocity_verlet(double* x, double* v, int nsteps) {
                 double a[$DIM];
+                $ACCELERATION_PREAMBLE_CODE
                 for (int k=0;k<nsteps;++k) {
                     for (int j=0;j<$DIM;++j) a[j] = 0;
                     $ACCELERATION_UPDATE_CODE
@@ -102,7 +112,9 @@ class VerletIntegrator(TimeIntegrator):
             }
             ''').substitute(DIM=self.dynamical_system.dim,
                             DT=self.dt,
-                            ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code)
+                            ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code,
+                            ACCELERATION_HEADER_CODE=header,
+                            ACCELERATION_PREAMBLE_CODE=preamble)
             sha = hashlib.md5()
             sha.update(c_sourcecode.encode())
             filestem = './velocity_verlet_'+sha.hexdigest()
