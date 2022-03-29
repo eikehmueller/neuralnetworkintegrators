@@ -137,6 +137,99 @@ class HarmonicOscillator(DynamicalSystem):
         v = np.array(-x0[0]*omega*sin_omegat + v0[0]*cos_omegat)
         return x, v
 
+class DoublePendulum(DynamicalSystem):
+    def __init__(self, mass, L1, L2, g=9.81):
+        '''2-dimensional double pendulum described by the equations
+        of motion
+
+        dx_0/dt = v_0, dv_0/dt = [F1,F2] in scaled force section
+
+        :arg mass: Particle mass
+        :arg g: gravitional force constant
+        :arg L1: length of first segment of double pendulum
+        :arg L2: length of second segment of double pendulum
+        '''
+        super().__init__(2,mass)
+        self.g = g
+        self.L1 = L1
+        self.L2 = L2
+        # C-code snipped for computing the acceleration update
+        self.acceleration_header_code = '''
+        #include "math.h"
+        '''
+        self.acceleration_preamble_code = '''
+        double cos_x0_x1;
+        double sin_x0_x1;
+        double sin_x0;
+        double sin_x1;
+        '''
+        self.acceleration_update_code = '''
+        cos_x0_x1 = cos(x[0]-x[1]);
+        sin_x0_x1 = sin(x[0]-x[1]);
+        sin_x0 = sin(x[0]);
+        sin_x1 = sin(x[1]);
+        a[0] += (1/({L1}*({mu} - (cos_x0_x1*cos_x0_x1))))
+             * ({g}*(sin_x1*cos_x0_x1-{mu}*sin_x0)
+             - ({L2}*(v[1]*v[1]) + {L1}*(v[0]*v[0])*cos_x0_x1)*sin_x0_x1);
+        a[1] += (1/({L2}*({mu} - (cos_x0_x1*cos_x0_x1)))) \
+             * ({g}*{mu}*(sin_x0*cos_x0_x1-sin_x1) \
+             + ({L1}*{mu}*(v[0]*v[0])+{L2}*(v[1]*v[1])*cos_x0_x1)*sin_x0_x1);
+        '''.format(mu=1+self.mass[0]+self.mass[1],L1=self.L1,L2=self.L2,g=self.g)
+
+    def compute_scaled_force(self,x,v,force):
+        '''Set the entry force[0] of the force vector
+
+        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg force: Resulting force vector (2-dimensional array)
+        '''
+        L1 = self.L1
+        L2 = self.L2
+        mass = self.mass
+        g = self.g
+
+        mu = 1 + mass[0] + mass[1]
+
+        force[0] = (1/(L1*(mu - (np.cos(x[0]-x[1])**2)))) \
+                    * (g*(np.sin(x[1])*np.cos(x[0]-x[1])-mu*np.sin(x[0])) \
+                       - (L2*(v[1]**2) + L1*(v[0]**2)*np.cos(x[0]-x[1]))*np.sin(x[0]-x[1]))
+        force[1] = (1/(L2*(mu - (np.cos(x[0]-x[1])**2)))) \
+            * (g*mu*(np.sin(x[0])*np.cos(x[0]-x[1])-np.sin(x[1])) \
+               + (L1*mu*(v[0]**2) + L2*(v[1]**2)*np.cos(x[0]-x[1]))*np.sin(x[0]-x[1]))
+
+    def set_random_state(self,x,v):
+        '''Draw position and angular velocity from a normal distribution
+        :arg x: Angles with vertical (2-dimensional array)
+        :arg v: Angular velocities (2-dimensional array)
+        '''
+
+        x[0:2] = np.random.normal(0,(np.pi)/2,(2)) #angles of mass 1 and 2
+        v[0:2] = np.random.normal(0,1,(2)) #angular velocities of mass 1 and 2
+
+    def energy(self,x,v):
+        '''Compute total energy E = 1/2*m*v_0^2 + 1/2*k*x_0^2
+
+        :arg x: Angles with vertical (2-dimensional array)
+        :arg v: Angular velocities(2-dimensional array)
+        '''
+
+        L1 = self.L1
+        L2 = self.L2
+        g = self.g
+        mass = self.mass
+
+        '''Potential Energy'''
+        V_pot = mass[0]*g*L1*(1-np.cos(x[0])) \
+              + mass[1]*g*(L1*(1-np.cos(x[0])) \
+              + L2*(1-np.cos(x[1])))
+
+        '''Kinetic Energy'''
+        T_kin = 0.5*mass[0]*(L1**2)*(v[0]**2) \
+              + 0.5*mass[1]*(L1**2)*(v[0]**2) \
+              + 0.5*mass[1]*(L2**2)*(v[1]**2) \
+              + mass[0]*L1*L2*np.cos(x[0]-x[1])*v[0]*v[1]
+
+        return V_pot + T_kin
+
 
 class LennartJonesSystem(DynamicalSystem):
     def __init__(self,mass,npart,boxsize,
