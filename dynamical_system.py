@@ -21,11 +21,12 @@ class DynamicalSystem(object):
         self.dim = dim
         self.mass = mass
 
-    def compute_scaled_force(self,x,force):
+    def compute_scaled_force(self,x,v,force):
         '''Store the forces scaled by inverse mass in the vector
         such that force[j] = F_j(x)/m_j
 
         :arg x: Particle positions x (d-dimensional array)
+        :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (d-dimensional array)
         '''
         pass
@@ -55,13 +56,13 @@ class DynamicalSystem(object):
         :arg x: Positions (d-dimensional array)
         '''
         pass
-    
+
     def forward_map(self,x0,v0,t):
         '''Exact forward map
-        
+
         Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
         This will only be implemented if the specific dynamical system has an analytical solution
-        
+
         :arg x0: initial position x(0)
         :arg v0: initial velocity v(0)
         :arg t: final time
@@ -85,11 +86,12 @@ class HarmonicOscillator(DynamicalSystem):
         a[0] += -($KSPRING/$MASS)*x[0];
         ''').substitute(KSPRING=self.k_spring,MASS=self.mass)
 
-    def compute_scaled_force(self,x,force):
+    def compute_scaled_force(self,x,v,force):
         '''Set the entry force[0] of the force vector
         to -k/m_0*x_0
 
         :arg x: Particle position x (1-dimensional array)
+        :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (1-dimensional array)
         '''
         force[0] = -self.k_spring/self.mass*x[0]
@@ -109,19 +111,19 @@ class HarmonicOscillator(DynamicalSystem):
         :arg v: Velocities (d-dimensional array)
         '''
         return 0.5*self.mass*v[0]**2 + 0.5*self.k_spring*x[0]**2
-    
+
     def forward_map(self,x0,v0,t):
         '''Exact forward map
-        
+
         Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
-        
+
         For this use:
-        
+
         x(t) = x(0)*cos(omega*t) + omega*v(0)*sin(omega*t)
         v(t) = -x(0)/omega*sin(omega*t) + v(0)*cos(omega*t)
-        
+
         with omegae = sqrt(k/m)
-        
+
         :arg x0: initial position x(0)
         :arg v0: initial velocity v(0)
         :arg t: final time
