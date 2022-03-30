@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
-from matplotlib import pyplot as plt
 import ctypes
 import subprocess
-import numpy as np
 import string
+from matplotlib import pyplot as plt
+import numpy as np
 
 
 class DynamicalSystem(ABC):
     def __init__(self, dim, mass):
-        '''Abstract base class for a dynamical system
+        """Abstract base class for a dynamical system
 
         Models a d-dimensional system of the following form:
 
@@ -19,48 +19,48 @@ class DynamicalSystem(ABC):
 
         :arg dim: Spatial dimension of dynamical system
         :arg mass: Mass of the system (can be a scalar in 1d)
-        '''
+        """
         self.dim = dim
         self.mass = mass
+        self.acceleration_header_code = None
+        self.acceleration_preamble_code = None
+        self.acceleration_update_code = None
 
     @abstractmethod
     def compute_scaled_force(self, x, v, force):
-        '''Store the forces scaled by inverse mass in the vector
+        """Store the forces scaled by inverse mass in the vector
         such that force[j] = F_j(x)/m_j
 
         :arg x: Particle positions x (d-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (d-dimensional array)
-        '''
-        ...
+        """
 
     @abstractmethod
     def set_random_state(self, x, v):
-        '''Set the position x and v to random values. This will be used
+        """Set the position x and v to random values. This will be used
         during the training stage to pick a suitable set of initial values
-        for the problem at hand
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
+        """
 
     @abstractmethod
     def energy(self, x, v):
-        '''Return the total energy for given positions and velocities
+        """Return the total energy for given positions and velocities
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
+        """
 
     def apply_constraints(self, x):
-        '''Apply constraints, such as period boundary conditions
+        """Apply constraints, such as period boundary conditions
 
         :arg x: Positions (d-dimensional array)
-        '''
-        pass
+        """
 
     def forward_map(self, x0, v0, t):
-        '''Exact forward map
+        """Exact forward map
 
         Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
         This will only be implemented if the specific dynamical system has an analytical solution
@@ -68,55 +68,53 @@ class DynamicalSystem(ABC):
         :arg x0: initial position x(0)
         :arg v0: initial velocity v(0)
         :arg t: final time
-        '''
+        """
         raise NotImplementedError("Dynamical system has no exact solution.")
 
 
 class HarmonicOscillator(DynamicalSystem):
     def __init__(self, mass, k_spring):
-        '''One-dimensional harmonic oscillator described by the equations
+        """One-dimensional harmonic oscillator described by the equations
         of motion
 
         dx_0/dt = v_0, dv_0/dt = -k/m_0*x_0
 
         :arg mass: Particle mass
         :arg k_spring: Spring constant k
-        '''
+        """
         super().__init__(1, mass)
         self.k_spring = k_spring
         # C-code snipped for computing the acceleration update
-        self.acceleration_update_code = '''
-        a[0] += -({kspring}/{mass})*x[0];
-        '''.format(kspring=self.k_spring, mass=self.mass)
+        self.acceleration_update_code = f"a[0] += -({self.k_spring}/{self.mass})*x[0];"
 
     def compute_scaled_force(self, x, v, force):
-        '''Set the entry force[0] of the force vector
+        """Set the entry force[0] of the force vector
         to -k/m_0*x_0
 
         :arg x: Particle position x (1-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (1-dimensional array)
-        '''
+        """
         force[0] = -self.k_spring / self.mass * x[0]
 
     def set_random_state(self, x, v):
-        '''Draw position and velocity from a normal distribution
+        """Draw position and velocity from a normal distribution
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
+        """
         x[0] = np.random.normal(0, 1)
         v[0] = np.random.normal(0, 1)
 
     def energy(self, x, v):
-        '''Compute total energy E = 1/2*m*v_0^2 + 1/2*k*x_0^2
+        """Compute total energy E = 1/2*m*v_0^2 + 1/2*k*x_0^2
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
-        return 0.5 * self.mass * v[0]**2 + 0.5 * self.k_spring * x[0]**2
+        """
+        return 0.5 * self.mass * v[0] ** 2 + 0.5 * self.k_spring * x[0] ** 2
 
     def forward_map(self, x0, v0, t):
-        '''Exact forward map
+        """Exact forward map
 
         Compute position x(t) and velocity v(t), given initial position x(0) and velocity v(0).
 
@@ -130,7 +128,7 @@ class HarmonicOscillator(DynamicalSystem):
         :arg x0: initial position x(0)
         :arg v0: initial velocity v(0)
         :arg t: final time
-        '''
+        """
         omega = np.sqrt(self.k_spring / self.mass)
         cos_omegat = np.cos(omega * t)
         sin_omegat = np.sin(omega * t)
@@ -141,7 +139,7 @@ class HarmonicOscillator(DynamicalSystem):
 
 class DoublePendulum(DynamicalSystem):
     def __init__(self, mass, L1, L2, g=9.81):
-        '''2-dimensional double pendulum described by the equations
+        """2-dimensional double pendulum described by the equations
         of motion
 
         dx_0/dt = v_0, dv_0/dt = [F1,F2] in scaled force section
@@ -150,22 +148,22 @@ class DoublePendulum(DynamicalSystem):
         :arg g: gravitional force constant
         :arg L1: length of first segment of double pendulum
         :arg L2: length of second segment of double pendulum
-        '''
+        """
         super().__init__(2, mass)
         self.g = g
         self.L1 = L1
         self.L2 = L2
         # C-code snipped for computing the acceleration update
-        self.acceleration_header_code = '''
+        self.acceleration_header_code = """
         #include "math.h"
-        '''
-        self.acceleration_preamble_code = '''
+        """
+        self.acceleration_preamble_code = """
         double cos_x0_x1;
         double sin_x0_x1;
         double sin_x0;
         double sin_x1;
-        '''
-        self.acceleration_update_code = '''
+        """
+        self.acceleration_update_code = """
         cos_x0_x1 = cos(x[0]-x[1]);
         sin_x0_x1 = sin(x[0]-x[1]);
         sin_x0 = sin(x[0]);
@@ -176,14 +174,16 @@ class DoublePendulum(DynamicalSystem):
         a[1] += (1/({L2}*({mu} - (cos_x0_x1*cos_x0_x1)))) \
              * ({g}*{mu}*(sin_x0*cos_x0_x1-sin_x1) \
              + ({L1}*{mu}*(v[0]*v[0])+{L2}*(v[1]*v[1])*cos_x0_x1)*sin_x0_x1);
-        '''.format(mu=1 + self.mass[0] + self.mass[1], L1=self.L1, L2=self.L2, g=self.g)
+        """.format(
+            mu=1 + self.mass[0] + self.mass[1], L1=self.L1, L2=self.L2, g=self.g
+        )
 
     def compute_scaled_force(self, x, v, force):
-        '''Set the entry force[0] of the force vector
+        """Set the entry force[0] of the force vector
 
         :arg x: angles of bobs wrt vertical (2-dimensional array)
         :arg force: Resulting force vector (2-dimensional array)
-        '''
+        """
         L1 = self.L1
         L2 = self.L2
         mass = self.mass
@@ -191,55 +191,64 @@ class DoublePendulum(DynamicalSystem):
 
         mu = 1 + mass[0] + mass[1]
 
-        force[0] = (1 / (L1 * (mu - (np.cos(x[0] - x[1])**2)))) \
-            * (g * (np.sin(x[1]) * np.cos(x[0] - x[1]) - mu * np.sin(x[0]))
-                - (L2 * (v[1]**2) + L1 * (v[0]**2) * np.cos(x[0] - x[1])) * np.sin(x[0] - x[1]))
-        force[1] = (1 / (L2 * (mu - (np.cos(x[0] - x[1])**2)))) \
-            * (g * mu * (np.sin(x[0]) * np.cos(x[0] - x[1]) - np.sin(x[1]))
-               + (L1 * mu * (v[0]**2) + L2 * (v[1]**2) * np.cos(x[0] - x[1])) * np.sin(x[0] - x[1]))
+        force[0] = (1 / (L1 * (mu - (np.cos(x[0] - x[1]) ** 2)))) * (
+            g * (np.sin(x[1]) * np.cos(x[0] - x[1]) - mu * np.sin(x[0]))
+            - (L2 * (v[1] ** 2) + L1 * (v[0] ** 2) * np.cos(x[0] - x[1]))
+            * np.sin(x[0] - x[1])
+        )
+        force[1] = (1 / (L2 * (mu - (np.cos(x[0] - x[1]) ** 2)))) * (
+            g * mu * (np.sin(x[0]) * np.cos(x[0] - x[1]) - np.sin(x[1]))
+            + (L1 * mu * (v[0] ** 2) + L2 * (v[1] ** 2) * np.cos(x[0] - x[1]))
+            * np.sin(x[0] - x[1])
+        )
 
     def set_random_state(self, x, v):
-        '''Draw position and angular velocity from a normal distribution
+        """Draw position and angular velocity from a normal distribution
         :arg x: Angles with vertical (2-dimensional array)
         :arg v: Angular velocities (2-dimensional array)
-        '''
+        """
 
         x[0:2] = np.random.normal(0, 0.5 * np.pi, size=(2))  # angles of mass 1 and 2
-        v[0:2] = np.random.normal(0, 1, size=(2))            # angular velocities of mass 1 and 2
+        v[0:2] = np.random.normal(0, 1, size=(2))  # angular velocities of mass 1 and 2
 
     def energy(self, x, v):
-        '''Compute total energy E = 1/2*m*v_0^2 + 1/2*k*x_0^2
+        """Compute total energy E = 1/2*m*v_0^2 + 1/2*k*x_0^2
 
         :arg x: Angles with vertical (2-dimensional array)
         :arg v: Angular velocities(2-dimensional array)
-        '''
+        """
 
         L1 = self.L1
         L2 = self.L2
         g = self.g
         mass = self.mass
 
-        '''Potential Energy'''
-        V_pot = mass[0] * g * L1 * (1 - np.cos(x[0])) \
-            + mass[1] * g * (L1 * (1 - np.cos(x[0]))
-                             + L2 * (1 - np.cos(x[1])))
+        # Potential Energy
+        V_pot = g * (
+            (mass[0] + mass[1]) * L1 * (1 - np.cos(x[0]))
+            + mass[1] * L2 * (1 - np.cos(x[1]))
+        )
 
-        '''Kinetic Energy'''
-        T_kin = 0.5 * mass[0] * L1**2 * v[0]**2 \
-            + 0.5 * mass[1] * L1**2 * v[0]**2 \
-            + 0.5 * mass[1] * L2**2 * v[1]**2 \
-            + mass[0] * L1 * L2 * np.cos(x[0] - x[1]) * v[0] * v[1]
+        # Kinetic Energy
+        T_kin = 0.5 * (mass[0] + mass[1]) * L1**2 * v[0] ** 2 + mass[1] * L2 * v[
+            1
+        ] * (0.5 * L2 * v[1] + L1 * v[0] * np.cos(x[0] - x[1]))
 
         return V_pot + T_kin
 
 
 class LennartJonesSystem(DynamicalSystem):
-    def __init__(self, mass, npart, boxsize,
-                 epsilon_pot=1.0,
-                 epsilon_kin=1.0,
-                 rcutoff=3.0,
-                 fast_force=True):
-        '''Set of particles interacting via the truncated Lennart-Jones
+    def __init__(
+        self,
+        mass,
+        npart,
+        boxsize,
+        epsilon_pot=1.0,
+        epsilon_kin=1.0,
+        rcutoff=3.0,
+        fast_force=True,
+    ):
+        """Set of particles interacting via the truncated Lennart-Jones
         potential V(r) defined by
 
         V(r) = V_{LJ}(r) - V_{LJ}(r_c)
@@ -271,7 +280,7 @@ class LennartJonesSystem(DynamicalSystem):
         :arg epsilon_pot: Scale of kinetic enegry
         :arg rcutoff: Cutoff distance for potential
         :arg fast_force: Evaluate force using compiled C code
-        '''
+        """
         super().__init__(2 * npart, mass)
         # Set parameters of dynamical system
         self.npart = npart
@@ -283,10 +292,15 @@ class LennartJonesSystem(DynamicalSystem):
         # Ensure that particle can not interact with its own periodic copies
         assert self.rcutoff < self.boxsize
         # Shift in potential energy to ensure that V(r_c) = 0
-        self.Vshift = 4. * self.epsilon_pot * (1. / self.rcutoff**12 - 1. / self.rcutoff**6)
+        self.Vshift = (
+            4.0
+            * self.epsilon_pot
+            * (1.0 / self.rcutoff**12 - 1.0 / self.rcutoff**6)
+        )
         self.fast_force = fast_force
-        if (self.fast_force):
-            c_sourcecode = string.Template('''
+        if self.fast_force:
+            c_sourcecode = string.Template(
+                """
             void calculate_lj_force(double* x, double* force) {
                 const int npart = $NPART;
                 const double boxsize = $BOXSIZE;
@@ -343,38 +357,51 @@ class LennartJonesSystem(DynamicalSystem):
                 }
                 return Vpot;
             }
-            ''').substitute(NPART=self.npart,
-                            BOXSIZE=self.boxsize,
-                            RCUTOFF2=self.rcutoff**2,
-                            EPSILON_POT=self.epsilon_pot,
-                            MASS=self.mass,
-                            VSHIFT=self.Vshift)
-            with open('calculate_lj_force.c', 'w', encoding='unicode') as f:
+            """
+            ).substitute(
+                NPART=self.npart,
+                BOXSIZE=self.boxsize,
+                RCUTOFF2=self.rcutoff**2,
+                EPSILON_POT=self.epsilon_pot,
+                MASS=self.mass,
+                VSHIFT=self.Vshift,
+            )
+            with open("calculate_lj_force.c", "w", encoding="utf8") as f:
                 print(c_sourcecode, file=f)
             # Compile source code (might have to adapt for different compiler)
-            subprocess.run(['gcc',
-                            '-fPIC', '-shared', '-o',
-                            'calculate_lj_force.so',
-                            'calculate_lj_force.c'], check=True)
-            so_file = './calculate_lj_force.so'
+            subprocess.run(
+                [
+                    "gcc",
+                    "-fPIC",
+                    "-shared",
+                    "-o",
+                    "calculate_lj_force.so",
+                    "calculate_lj_force.c",
+                ],
+                check=True,
+            )
+            so_file = "./calculate_lj_force.so"
             self.calculate_lj_force = ctypes.CDLL(so_file).calculate_lj_force
-            self.calculate_lj_force.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
-                                                flags="C_CONTIGUOUS"),
-                                                np.ctypeslib.ndpointer(ctypes.c_double,
-                                                flags="C_CONTIGUOUS")]
-            self.calculate_lj_potential_energy = ctypes.CDLL(so_file).calculate_lj_potential_energy
+            self.calculate_lj_force.argtypes = [
+                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+            ]
+            self.calculate_lj_potential_energy = ctypes.CDLL(
+                so_file
+            ).calculate_lj_potential_energy
             self.calculate_lj_potential_energy.restype = ctypes.c_double
-            self.calculate_lj_potential_energy.argtypes = [np.ctypeslib.ndpointer(ctypes.c_double,
-                                                           flags="C_CONTIGUOUS")]
+            self.calculate_lj_potential_energy.argtypes = [
+                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS")
+            ]
 
     def compute_scaled_force(self, x, v, force):
-        '''Set the entries force[:] of the force vector
+        """Set the entries force[:] of the force vector
 
         :arg x: Particle position x (2*npart-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
         :arg force: Resulting force vector (2*npart-dimensional array)
-        '''
-        if (self.fast_force):
+        """
+        if self.fast_force:
             self.calculate_lj_force(x, force)
         else:
             force[:] = 0.0
@@ -384,17 +411,22 @@ class LennartJonesSystem(DynamicalSystem):
                         continue
                     for xboxoffset in (-1, 0, +1):
                         for yboxoffset in (-1, 0, +1):
-                            dx = x[2 * k:2 * k + 2] - x[2 * j:2 * j + 2]
+                            dx = x[2 * k : 2 * k + 2] - x[2 * j : 2 * j + 2]
                             dx[0] += self.boxsize * xboxoffset
                             dx[1] += self.boxsize * yboxoffset
-                            nrm2 = dx[0]**2 + dx[1]**2
+                            nrm2 = dx[0] ** 2 + dx[1] ** 2
                             if nrm2 <= self.rcutoff**2:
-                                invnrm2 = 1. / nrm2
-                                Fabs = 24. * self.epsilon_pot * invnrm2**4 * (2. * invnrm2**3 - 1.0)
-                                force[2 * j:2 * j + 2] -= Fabs / self.mass * dx[:]
+                                invnrm2 = 1.0 / nrm2
+                                Fabs = (
+                                    24.0
+                                    * self.epsilon_pot
+                                    * invnrm2**4
+                                    * (2.0 * invnrm2**3 - 1.0)
+                                )
+                                force[2 * j : 2 * j + 2] -= Fabs / self.mass * dx[:]
 
     def set_random_state(self, x, v):
-        '''Draw position and velocity randomly
+        """Draw position and velocity randomly
 
         The velocities are drawn from a normal distribution with mean zero and
         variance chosen such that <1/2*m*v^2> = E_kin. The particles are
@@ -404,40 +436,42 @@ class LennartJonesSystem(DynamicalSystem):
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
+        """
 
         # Draw positions such that no two particles (and their periodic copies)
         # are closer than 1 (~ the potential minimum)
         accepted = False
         while not accepted:
-            positions = np.random.uniform(low=0,
-                                          high=self.boxsize,
-                                          size=(self.npart, 2))
+            positions = np.random.uniform(
+                low=0, high=self.boxsize, size=(self.npart, 2)
+            )
             for offsetx in (-1, 0, +1):
                 for offsety in (-1, 0, +1):
                     if (offsetx == 0) and (offsety == 0):
                         continue
-                    offset_vector = np.array([self.boxsize * offsetx,
-                                              self.boxsize * offsety])
-                    positions = np.concatenate((positions,
-                                                positions[:self.npart, :] + offset_vector))
+                    offset_vector = np.array(
+                        [self.boxsize * offsetx, self.boxsize * offsety]
+                    )
+                    positions = np.concatenate(
+                        (positions, positions[: self.npart, :] + offset_vector)
+                    )
             accepted = True
             for j in range(9 * self.npart):
                 for k in range(j):
                     diff = positions[j, :] - positions[k, :]
                     distance = np.linalg.norm(diff)
-                    accepted = accepted and (distance > 2.**(1. / 6.))
-        x[:] = positions[:self.npart, :].flatten()
+                    accepted = accepted and (distance > 2.0 ** (1.0 / 6.0))
+        x[:] = positions[: self.npart, :].flatten()
         # Draw velocities such that <1/2*m*v^2> ~ \epsilon_kin
-        sigma_v = np.sqrt(2. * self.epsilon_kin / self.mass)
+        sigma_v = np.sqrt(2.0 * self.epsilon_kin / self.mass)
         v[:] = np.random.normal(0, sigma_v, size=self.dim)
 
     def visualise_configuration(self, x, v, filename=None):
-        '''Visualise the configuration (including any periodic copies)
+        """Visualise the configuration (including any periodic copies)
 
         :arg x: Positions
         :arg v: Velocities
-        '''
+        """
         plt.clf()
         ax = plt.gca()
         ax.set_aspect(1.0)
@@ -445,28 +479,29 @@ class LennartJonesSystem(DynamicalSystem):
         ax.set_ylim(0, self.boxsize)
         X, Y = x.reshape((self.npart, 2)).transpose()
         Vx, Vy = v.reshape((self.npart, 2)).transpose()
-        plt.plot(X, Y, markersize=4, marker='o', linewidth=0, color='red')
+        plt.plot(X, Y, markersize=4, marker="o", linewidth=0, color="red")
         for j in range(self.npart):
             plt.arrow(X[j], Y[j], Vx[j], Vy[j])
         for offsetx in (-1, 0, +1):
             for offsety in (-1, 0, +1):
-                offset_vector = np.array([self.boxsize * offsetx,
-                                          self.boxsize * offsety])
+                offset_vector = np.array(
+                    [self.boxsize * offsetx, self.boxsize * offsety]
+                )
                 for j in range(self.npart):
-                    x_shifted = x[2 * j:2 * j + 2] + offset_vector
-                    circle = plt.Circle(x_shifted, 1.0, color='r', alpha=0.2)
+                    x_shifted = x[2 * j : 2 * j + 2] + offset_vector
+                    circle = plt.Circle(x_shifted, 1.0, color="r", alpha=0.2)
                     ax.add_patch(circle)
-        if not (filename is None):
-            plt.savefig(filename, bbox_inches='tight')
+        if filename:
+            plt.savefig(filename, bbox_inches="tight")
 
     def energy(self, x, v):
-        '''Compute total energy
+        """Compute total energy
 
         :arg x: Positions (d-dimensional array)
         :arg v: Velocities (d-dimensional array)
-        '''
+        """
         Vkin = 0.5 * self.mass * np.dot(v, v)
-        if (self.fast_force):
+        if self.fast_force:
             Vpot = self.calculate_lj_potential_energy(x)
         else:
             Vpot = 0.0
@@ -474,19 +509,21 @@ class LennartJonesSystem(DynamicalSystem):
                 for k in range(j):
                     for xboxoffset in (-1, 0, +1):
                         for yboxoffset in (-1, 0, +1):
-                            dx = x[2 * k:2 * k + 2] - x[2 * j:2 * j + 2]
+                            dx = x[2 * k : 2 * k + 2] - x[2 * j : 2 * j + 2]
                             dx[0] += self.boxsize * xboxoffset
                             dx[1] += self.boxsize * yboxoffset
-                            nrm2 = dx[0]**2 + dx[1]**2
+                            nrm2 = dx[0] ** 2 + dx[1] ** 2
                             if nrm2 <= self.rcutoff**2:
-                                invnrm6 = 1. / nrm2**3
-                                Vpot += 4. * self.epsilon_pot * invnrm6 * (invnrm6 - 1.)
+                                invnrm6 = 1.0 / nrm2**3
+                                Vpot += (
+                                    4.0 * self.epsilon_pot * invnrm6 * (invnrm6 - 1.0)
+                                )
                                 Vpot -= self.Vshift
         return Vkin + Vpot
 
     def apply_constraints(self, x):
-        '''Apply constraints, such as period boundary conditions
+        """Apply constraints, such as period boundary conditions
 
         :arg x: Positions (d-dimensional array)
-        '''
+        """
         x[:] -= (x[:] // self.boxsize) * self.boxsize

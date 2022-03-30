@@ -1,10 +1,10 @@
-'''Neural network models'''
+"""Neural network models"""
 import tensorflow as tf
 from tensorflow import keras
 
 
 class VerletModel(keras.Model):
-    '''Single step of a Symplectic Stoermer Verlet integrator update for a
+    """Single step of a Symplectic Stoermer Verlet integrator update for a
     separable system with Hamiltonian H(q,p) = T(p) + V(q)
 
     The model maps the current state (q_n,p_n) to next state (q_{n+1},p_{n+1})
@@ -21,7 +21,8 @@ class VerletModel(keras.Model):
     :arg dt: timestep size
     :arg V_pot_layers: layers encoding the neural network for potential energy V(q)
     :arg T_kin_layers: layers encoding the neural network for kinetic energy T(p)
-    '''
+    """
+
     def __init__(self, dim, dt, V_pot_layers, T_kin_layers):
         super().__init__()
         self.dim = dim
@@ -32,35 +33,37 @@ class VerletModel(keras.Model):
         self.T_kin_final_layer = keras.layers.Dense(self.dim // 2, use_bias=False)
 
     def set_weights(self, V_pot_layer_weights, T_kin_layer_weights):
-        '''Set weights of layers in energy networks
+        """Set weights of layers in energy networks
 
         :arg V_pot_layer_weights: dictionary with weights of layers in potential energy network
         :arg T_kin_layer_weights: dictionary with weights of layers in kinetic energy network
-        '''
-        for layer in self.V_pot_layers:
-            try:
-                layer.set_weights(V_pot_layer_weights[layer.name])
-            except:
-                pass
-        try:
-            self.V_pot_final_layer.set_weights(V_pot_layer_weights['final'])
-        except:
-            pass
-        for layer in self.T_kin_layers:
-            try:
-                layer.set_weights(T_kin_layer_weights[layer.name])
-            except:
-                pass
-        try:
-            self.T_kin_final_layer.set_weights(T_kin_layer_weights['final'])
-        except:
-            pass
+        """
+        if V_pot_layer_weights:
+            for layer in self.V_pot_layers:
+                if layer.name in V_pot_layer_weights.keys():
+                    layer.set_weights(V_pot_layer_weights[layer.name])
+                else:
+                    print(f"WARNING: Weights of V_pot layer '{layer.name}' not set.")
+            if "final" in V_pot_layer_weights.keys():
+                self.V_pot_final_layer.set_weights(V_pot_layer_weights["final"])
+            else:
+                print("WARNING: Weights of final V_pot layer not set.")
+        if T_kin_layer_weights:
+            for layer in self.T_kin_layers:
+                if layer.name in T_kin_layer_weights.keys():
+                    layer.set_weights(T_kin_layer_weights[layer.name])
+                else:
+                    print(f"WARNING: Weights of T_kin layer '{layer.name}' not set.")
+            if "final" in T_kin_layer_weights.keys():
+                self.T_kin_final_layer.set_weights(T_kin_layer_weights["final"])
+            else:
+                print("WARNING: Weights of final T_kin layer not set.")
 
     def V_pot(self, q):
-        '''Evaluate potential energy network V(q)
+        """Evaluate potential energy network V(q)
 
         :arg q: position q  which to evaluate the potential
-        '''
+        """
         x = q
         for layer in self.V_pot_layers:
             x = layer(x)
@@ -68,10 +71,10 @@ class VerletModel(keras.Model):
         return x
 
     def T_kin(self, p):
-        '''Evaluate kinetic energy network T(p)
+        """Evaluate kinetic energy network T(p)
 
         :arg p: momentum p at which to evaluate the kinetic energy
-        '''
+        """
         x = p
         for layer in self.T_kin_layers:
             x = layer(x)
@@ -80,14 +83,14 @@ class VerletModel(keras.Model):
 
     @tf.function
     def verlet_step(self, q_n, p_n):
-        '''Carry out a single Stoermer-Verlet step
+        """Carry out a single Stoermer-Verlet step
 
         This function maps (q_n,p_n) to (q_{n+1},p_{n+1}) using a single Stoermer
         Verlet step
 
         :arg q_n: current position q_n
         :arg p_n: current momentum p_n
-        '''
+        """
         # p_{n+1/2} = p_n - dt/2*dV/dq(q_n)
         dV_dq = tf.gradients(self.V_pot(q_n), q_n)[0]
         p_n = p_n - 0.5 * self.dt * dV_dq
@@ -103,7 +106,7 @@ class VerletModel(keras.Model):
         return q_n, p_n
 
     def call(self, inputs):
-        '''Evaluate model
+        """Evaluate model
 
         Split the inputs = (q_n,p_n) into position and momentum and
         return the state (q_{n+1},p_{n+1}) at the next timestep.
@@ -112,12 +115,21 @@ class VerletModel(keras.Model):
         the non-symplectic update.
 
         :arg inputs: state (q_n,p_n) as a B x 1 x 2d tensor
-        '''
+        """
         input_shape = tf.shape(inputs)
         # Extract q_n and p_n from input
-        qp_old = tf.unstack(tf.reshape(inputs, (input_shape[0], input_shape[2],)), axis=-1)
-        q_old = tf.stack(qp_old[:self.dim // 2], axis=-1)
-        p_old = tf.stack(qp_old[self.dim // 2:], axis=-1)
+        qp_old = tf.unstack(
+            tf.reshape(
+                inputs,
+                (
+                    input_shape[0],
+                    input_shape[2],
+                ),
+            ),
+            axis=-1,
+        )
+        q_old = tf.stack(qp_old[: self.dim // 2], axis=-1)
+        p_old = tf.stack(qp_old[self.dim // 2 :], axis=-1)
         q_new, p_new = self.verlet_step(q_old, p_old)
         # Combine result of Verlet step into tensor of correct size
         outputs = tf.concat([q_new, p_new], axis=-1)
