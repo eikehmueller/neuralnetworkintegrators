@@ -168,12 +168,12 @@ class DoublePendulum(DynamicalSystem):
         sin_x0_x1 = sin(x[0]-x[1]);
         sin_x0 = sin(x[0]);
         sin_x1 = sin(x[1]);
-        a[0] += (1/({L1}*({mu} - (cos_x0_x1*cos_x0_x1))))
+        a[0] += 1/({L1}*({mu} - cos_x0_x1*cos_x0_x1))
              * ({g}*(sin_x1*cos_x0_x1-{mu}*sin_x0)
-             - ({L2}*(v[1]*v[1]) + {L1}*(v[0]*v[0])*cos_x0_x1)*sin_x0_x1);
-        a[1] += (1/({L2}*({mu} - (cos_x0_x1*cos_x0_x1)))) \
-             * ({g}*{mu}*(sin_x0*cos_x0_x1-sin_x1) \
-             + ({L1}*{mu}*(v[0]*v[0])+{L2}*(v[1]*v[1])*cos_x0_x1)*sin_x0_x1);
+             - ({L2}*v[1]*v[1] + {L1}*v[0]*v[0]*cos_x0_x1)*sin_x0_x1);
+        a[1] += 1/({L2}*({mu} - cos_x0_x1*cos_x0_x1))
+             * ({g}*{mu}*(sin_x0*cos_x0_x1-sin_x1)
+             + ({L1}*{mu}*v[0]*v[0]+{L2}*v[1]*v[1]*cos_x0_x1)*sin_x0_x1);
         """.format(
             mu=1 + self.mass[0] + self.mass[1], L1=self.L1, L2=self.L2, g=self.g
         )
@@ -191,15 +191,23 @@ class DoublePendulum(DynamicalSystem):
 
         mu = 1 + mass[0] + mass[1]
 
-        force[0] = (1 / (L1 * (mu - (np.cos(x[0] - x[1]) ** 2)))) * (
-            g * (np.sin(x[1]) * np.cos(x[0] - x[1]) - mu * np.sin(x[0]))
-            - (L2 * (v[1] ** 2) + L1 * (v[0] ** 2) * np.cos(x[0] - x[1]))
-            * np.sin(x[0] - x[1])
+        force[0] = (
+            1
+            / (L1 * (mu - np.cos(x[0] - x[1]) ** 2))
+            * (
+                g * (np.sin(x[1]) * np.cos(x[0] - x[1]) - mu * np.sin(x[0]))
+                - (L2 * v[1] ** 2 + L1 * v[0] ** 2 * np.cos(x[0] - x[1]))
+                * np.sin(x[0] - x[1])
+            )
         )
-        force[1] = (1 / (L2 * (mu - (np.cos(x[0] - x[1]) ** 2)))) * (
-            g * mu * (np.sin(x[0]) * np.cos(x[0] - x[1]) - np.sin(x[1]))
-            + (L1 * mu * (v[0] ** 2) + L2 * (v[1] ** 2) * np.cos(x[0] - x[1]))
-            * np.sin(x[0] - x[1])
+        force[1] = (
+            1
+            / (L2 * (mu - np.cos(x[0] - x[1]) ** 2))
+            * (
+                g * mu * (np.sin(x[0]) * np.cos(x[0] - x[1]) - np.sin(x[1]))
+                + (L1 * mu * (v[0] ** 2) + L2 * (v[1] ** 2) * np.cos(x[0] - x[1]))
+                * np.sin(x[0] - x[1])
+            )
         )
 
     def set_random_state(self, x, v):
