@@ -341,8 +341,8 @@ class CoupledPendulums(DynamicalSystem):
     def compute_acceleration(self, x, v, acceleration):
         """Set the entries acceleration[0] and acceleration[1] of the acceleration vector
 
-        The acceleration is the angular acceleration, i.e. the force scaled by the momentum of inertia
-        given by I = mass*L_rod^2
+        The acceleration is the angular acceleration, i.e. the force scaled by the momentum of
+        inertia given by I = mass*L_rod^2
 
         With theta_0 = x[0], theta_1, x[1], dot(theta_0) = v[0], dot(theta_1) = v[1],
         the accelerations are gives:
