@@ -17,7 +17,7 @@ class TimeIntegrator(ABC):
         self.dt = dt
         self.x = np.zeros(dynamical_system.dim)
         self.v = np.zeros(dynamical_system.dim)
-        self.force = np.zeros(dynamical_system.dim)
+        self.acceleration = np.zeros(dynamical_system.dim)
         self.label = None
 
     def set_state(self, x, v):
@@ -29,7 +29,7 @@ class TimeIntegrator(ABC):
         """
         self.x[:] = x[:]
         self.v[:] = v[:]
-        self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+        self.dynamical_system.compute_acceleration(self.x, self.v, self.acceleration)
 
     @abstractmethod
     def integrate(self, n_steps):
@@ -67,9 +67,11 @@ class ForwardEulerIntegrator(TimeIntegrator):
         for _ in range(n_steps):
             self.x[:] += self.dt * self.v[:]
             self.dynamical_system.apply_constraints(self.x)
-            self.v[:] += self.dt * self.force[:]
-            # Compute force at next timestep
-            self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+            self.v[:] += self.dt * self.acceleration[:]
+            # Compute acceleration at next timestep
+            self.dynamical_system.compute_acceleration(
+                self.x, self.v, self.acceleration
+            )
 
 
 class VerletIntegrator(TimeIntegrator):
@@ -150,11 +152,15 @@ class VerletIntegrator(TimeIntegrator):
             self.c_velocity_verlet(self.x, self.v, n_steps)
         else:
             for _ in range(n_steps):
-                self.x[:] += self.dt * self.v[:] + 0.5 * self.dt**2 * self.force[:]
+                self.x[:] += (
+                    self.dt * self.v[:] + 0.5 * self.dt**2 * self.acceleration[:]
+                )
                 self.dynamical_system.apply_constraints(self.x)
-                self.v[:] += 0.5 * self.dt * self.force[:]
-                self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
-                self.v[:] += 0.5 * self.dt * self.force[:]
+                self.v[:] += 0.5 * self.dt * self.acceleration[:]
+                self.dynamical_system.compute_acceleration(
+                    self.x, self.v, self.acceleration
+                )
+                self.v[:] += 0.5 * self.dt * self.acceleration[:]
 
 
 class RK4Integrator(TimeIntegrator):
@@ -304,28 +310,34 @@ class RK4Integrator(TimeIntegrator):
                 vt[:] = self.v[:]
                 # Stage 1: compute k1
                 self.k1x[:] = self.v[:]
-                self.k1v[:] = self.force[:]
+                self.k1v[:] = self.acceleration[:]
                 # Stage 2: compute k2
                 self.x[:] = xt[:] + 0.5 * self.dt * self.k1x[:]
                 self.v[:] = vt[:] + 0.5 * self.dt * self.k1v[:]
                 self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+                self.dynamical_system.compute_acceleration(
+                    self.x, self.v, self.acceleration
+                )
                 self.k2x[:] = self.v[:]
-                self.k2v[:] = self.force[:]
+                self.k2v[:] = self.acceleration[:]
                 # Stage 3: compute k3
                 self.x[:] = xt[:] + 0.5 * self.dt * self.k2x[:]
                 self.v[:] = vt[:] + 0.5 * self.dt * self.k2v[:]
                 self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+                self.dynamical_system.compute_acceleration(
+                    self.x, self.v, self.acceleration
+                )
                 self.k3x[:] = self.v[:]
-                self.k3v[:] = self.force[:]
+                self.k3v[:] = self.acceleration[:]
                 # Stage 4: compute k4
                 self.x[:] = xt[:] + self.dt * self.k3x[:]
                 self.v[:] = vt[:] + self.dt * self.k3v[:]
                 self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+                self.dynamical_system.compute_acceleration(
+                    self.x, self.v, self.acceleration
+                )
                 self.k4x[:] = self.v[:]
-                self.k4v[:] = self.force[:]
+                self.k4v[:] = self.acceleration[:]
                 # Final stage: combine k's
                 self.x[:] = xt[:] + self.dt / 6.0 * (
                     self.k1x[:] + 2.0 * self.k2x[:] + 2.0 * self.k3x[:] + self.k4x[:]
@@ -334,7 +346,9 @@ class RK4Integrator(TimeIntegrator):
                     self.k1v[:] + 2.0 * self.k2v[:] + 2.0 * self.k3v[:] + self.k4v[:]
                 )
                 self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_scaled_force(self.x, self.v, self.force)
+                self.dynamical_system.compute_acceleration(
+                    self.x, self.v, self.acceleration
+                )
 
 
 class ExactIntegrator(TimeIntegrator):

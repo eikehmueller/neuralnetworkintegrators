@@ -30,13 +30,13 @@ class DynamicalSystem(ABC):
         self.acceleration_update_code = None
 
     @abstractmethod
-    def compute_scaled_force(self, x, v, force):
-        """Store the forces scaled by inverse mass in the vector
-        such that force[j] = F_j(x)/m_j
+    def compute_acceleration(self, x, v, acceleration):
+        """Store the acceleration (forces scaled by inverse masses) in the vector
+        such that acceleration[j] = F_j(x)/m_j
 
         :arg x: Particle positions x (d-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
-        :arg force: Resulting force vector (d-dimensional array)
+        :arg acceleration: Resulting acceleration vector (d-dimensional array)
         """
 
     @abstractmethod
@@ -93,15 +93,14 @@ class HarmonicOscillator(DynamicalSystem):
         # C-code snipped for computing the acceleration update
         self.acceleration_update_code = f"a[0] += -({self.k_spring}/{self.mass})*x[0];"
 
-    def compute_scaled_force(self, x, v, force):
-        """Set the entry force[0] of the force vector
-        to -k/m_0*x_0
+    def compute_acceleration(self, x, v, acceleration):
+        """Set the entry acceleration[0] of the acceleration vector to -k/m_0*x_0
 
         :arg x: Particle position x (1-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
-        :arg force: Resulting force vector (1-dimensional array)
+        :arg acceleration: Resulting acceleration vector (1-dimensional array)
         """
-        force[0] = -self.k_spring / self.mass * x[0]
+        acceleration[0] = -self.k_spring / self.mass * x[0]
 
     def set_random_state(self, x, v):
         """Draw position and velocity from a normal distribution
@@ -147,14 +146,14 @@ class DoublePendulum(DynamicalSystem):
     """2-dimensional double pendulum described by the equations
     of motion
 
-    dx_0/dt = v_0, dv_0/dt = [F1,F2] in scaled force section
+    dx_0/dt = v_0, dv_0/dt = [a1,a2] in scaled acceleration section
     """
 
     def __init__(self, mass, L1, L2, g=9.81):
         """Construct new instance of double pendulum class.
 
         :arg mass: Particle mass (list of length two)
-        :arg g: gravitional force constant
+        :arg g: gravitional acceleration constant
         :arg L1: length of first segment of double pendulum
         :arg L2: length of second segment of double pendulum
         """
@@ -187,11 +186,11 @@ class DoublePendulum(DynamicalSystem):
             mu=1 + self.mass[0] + self.mass[1], L1=self.L1, L2=self.L2, g=self.g
         )
 
-    def compute_scaled_force(self, x, v, force):
-        """Set the entries force[0] and force[1] of the force vector
+    def compute_acceleration(self, x, v, acceleration):
+        """Set the entries acceleration[0] and acceleration[1] of the acceleration vector
 
         :arg x: angles of bobs wrt vertical (2-dimensional array)
-        :arg force: Resulting force vector (2-dimensional array)
+        :arg acceleration: Resulting acceleration vector (2-dimensional array)
         """
         L1 = self.L1
         L2 = self.L2
@@ -200,7 +199,7 @@ class DoublePendulum(DynamicalSystem):
 
         mu = 1 + mass[0] + mass[1]
 
-        force[0] = (
+        acceleration[0] = (
             1
             / (L1 * (mu - np.cos(x[0] - x[1]) ** 2))
             * (
@@ -209,7 +208,7 @@ class DoublePendulum(DynamicalSystem):
                 * np.sin(x[0] - x[1])
             )
         )
-        force[1] = (
+        acceleration[1] = (
             1
             / (L2 * (mu - np.cos(x[0] - x[1]) ** 2))
             * (
@@ -339,34 +338,36 @@ class CoupledPendulums(DynamicalSystem):
             + self.L_rod**2 * (np.cos(theta_1) - np.cos(theta_0)) ** 2
         )
 
-    def compute_scaled_force(self, x, v, force):
-        """Set the entries force[0] and force[1] of the force vector, scaled by the
-        momentum of I = inertia mass*L_rod^2
+    def compute_acceleration(self, x, v, acceleration):
+        """Set the entries acceleration[0] and acceleration[1] of the acceleration vector
+
+        The acceleration is the angular acceleration, i.e. the force scaled by the momentum of inertia
+        given by I = mass*L_rod^2
 
         With theta_0 = x[0], theta_1, x[1], dot(theta_0) = v[0], dot(theta_1) = v[1],
-        the forces are gives:
+        the accelerations are gives:
 
-        F_0/I = -1/I*dV_pot/dtheta_0
-              = C * ( -d_anchor*cos(theta_0) + L_rod*sin(theta_0-theta_1) )
-                - g_grav/L_rod*sin(theta_0)
+        a_0 = -1/I*dV_pot/dtheta_0
+            = C * ( -d_anchor*cos(theta_0) + L_rod*sin(theta_0-theta_1) )
+              - g_grav/L_rod*sin(theta_0)
 
-        F_1/I = -1/I*dV_pot/dtheta_1
-              = C * ( d_anchor*cos(theta_0) - L_rod*sin(theta_0-theta_1) )
-                - g_grav/L_rod*sin(theta_1)
+        a_1 = -1/I*dV_pot/dtheta_1
+            = C * ( d_anchor*cos(theta_0) - L_rod*sin(theta_0-theta_1) )
+              - g_grav/L_rod*sin(theta_1)
 
         where
 
         C = k_spring/(L_rod*mass)*(d_anchor-phi(theta_0,theta_1)) / phi(theta_0,theta_1)
 
         :arg x: angles of bobs wrt vertical (2-dimensional array)
-        :arg force: Resulting force vector (2-dimensional array)
+        :arg acceleration: Resulting acceleration vector (2-dimensional array)
         """
         phi = self._phi(x[0], x[1])
         C_tmp = self.k_spring / (self.L_rod * self.mass) * (self.d_anchor - phi) / phi
-        force[0] = C_tmp * (
+        acceleration[0] = C_tmp * (
             -self.d_anchor * np.cos(x[0]) + self.L_rod * np.sin(x[0] - x[1])
         ) - self.g_grav / self.L_rod * np.sin(x[0])
-        force[1] = C_tmp * (
+        acceleration[1] = C_tmp * (
             self.d_anchor * np.cos(x[1]) - self.L_rod * np.sin(x[0] - x[1])
         ) - self.g_grav / self.L_rod * np.sin(x[1])
 
@@ -430,7 +431,7 @@ class LennartJonesSystem(DynamicalSystem):
         epsilon_pot=1.0,
         epsilon_kin=1.0,
         rcutoff=3.0,
-        fast_force=True,
+        fast_acceleration=True,
     ):
         """Construct new instance of Lennart-Jones system
 
@@ -440,7 +441,7 @@ class LennartJonesSystem(DynamicalSystem):
         :arg epsilon_kin: Scale of potential energy
         :arg epsilon_pot: Scale of kinetic enegry
         :arg rcutoff: Cutoff distance for potential
-        :arg fast_force: Evaluate force using compiled C code
+        :arg fast_acceleration: Evaluate acceleration using compiled C code
         """
         super().__init__(2 * npart, mass)
         # Set parameters of dynamical system
@@ -458,18 +459,18 @@ class LennartJonesSystem(DynamicalSystem):
             * self.epsilon_pot
             * (1.0 / self.rcutoff**12 - 1.0 / self.rcutoff**6)
         )
-        self.fast_force = fast_force
-        if self.fast_force:
+        self.fast_acceleration = fast_acceleration
+        if self.fast_acceleration:
             c_sourcecode = string.Template(
                 """
-            void calculate_lj_force(double* x, double* force) {
+            void calculate_lj_acceleration(double* x, double* acceleration) {
                 const int npart = $NPART;
                 const double boxsize = $BOXSIZE;
                 const double rcutoff2 = $RCUTOFF2;
                 const double fscal = 24.*$EPSILON_POT/$MASS;
                 for (int j=0;j<npart;++j) {
-                    force[2*j] = 0.0;
-                    force[2*j+1] = 0.0;
+                    acceleration[2*j] = 0.0;
+                    acceleration[2*j+1] = 0.0;
                     for (int k=0;k<npart;++k) {
                         if (j==k) continue;
                         for (int xoff=0;xoff<=1;++xoff) {
@@ -483,8 +484,8 @@ class LennartJonesSystem(DynamicalSystem):
                                     double invnrm6 = invnrm4*invnrm2;
                                     double invnrm8 = invnrm4*invnrm4;
                                     double Fabs = fscal*invnrm8*(2.*invnrm6-1.);
-                                    force[2*j] -= Fabs*dx;
-                                    force[2*j+1] -= Fabs*dy;
+                                    acceleration[2*j] -= Fabs*dx;
+                                    acceleration[2*j+1] -= Fabs*dy;
                                 }
                             }
                         }
@@ -527,7 +528,7 @@ class LennartJonesSystem(DynamicalSystem):
                 MASS=self.mass,
                 VSHIFT=self.Vshift,
             )
-            with open("calculate_lj_force.c", "w", encoding="utf8") as f:
+            with open("calculate_lj_acceleration.c", "w", encoding="utf8") as f:
                 print(c_sourcecode, file=f)
             # Compile source code (might have to adapt for different compiler)
             subprocess.run(
@@ -536,14 +537,16 @@ class LennartJonesSystem(DynamicalSystem):
                     "-fPIC",
                     "-shared",
                     "-o",
-                    "calculate_lj_force.so",
-                    "calculate_lj_force.c",
+                    "calculate_lj_acceleration.so",
+                    "calculate_lj_acceleration.c",
                 ],
                 check=True,
             )
-            so_file = "./calculate_lj_force.so"
-            self.calculate_lj_force = ctypes.CDLL(so_file).calculate_lj_force
-            self.calculate_lj_force.argtypes = [
+            so_file = "./calculate_lj_acceleration.so"
+            self.calculate_lj_acceleration = ctypes.CDLL(
+                so_file
+            ).calculate_lj_acceleration
+            self.calculate_lj_acceleration.argtypes = [
                 np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
                 np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
             ]
@@ -555,17 +558,17 @@ class LennartJonesSystem(DynamicalSystem):
                 np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS")
             ]
 
-    def compute_scaled_force(self, x, v, force):
-        """Set the entries force[:] of the force vector
+    def compute_acceleration(self, x, v, acceleration):
+        """Set the entries acceleration[:] of the acceleration vector
 
         :arg x: Particle position x (2*npart-dimensional array)
         :arg v: Particle velocities x (d-dimensional array)
-        :arg force: Resulting force vector (2*npart-dimensional array)
+        :arg acceleration: Resulting acceleration vector (2*npart-dimensional array)
         """
-        if self.fast_force:
-            self.calculate_lj_force(x, force)
+        if self.fast_acceleration:
+            self.calculate_lj_acceleration(x, acceleration)
         else:
-            force[:] = 0.0
+            acceleration[:] = 0.0
             for j in range(self.npart):
                 for k in range(self.npart):
                     if j == k:
@@ -584,7 +587,9 @@ class LennartJonesSystem(DynamicalSystem):
                                     * invnrm2**4
                                     * (2.0 * invnrm2**3 - 1.0)
                                 )
-                                force[2 * j : 2 * j + 2] -= Fabs / self.mass * dx[:]
+                                acceleration[2 * j : 2 * j + 2] -= (
+                                    Fabs / self.mass * dx[:]
+                                )
 
     def set_random_state(self, x, v):
         """Draw position and velocity randomly
@@ -662,7 +667,7 @@ class LennartJonesSystem(DynamicalSystem):
         :arg v: Velocities (d-dimensional array)
         """
         Vkin = 0.5 * self.mass * np.dot(v, v)
-        if self.fast_force:
+        if self.fast_acceleration:
             Vpot = self.calculate_lj_potential_energy(x)
         else:
             Vpot = 0.0
