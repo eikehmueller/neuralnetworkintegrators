@@ -132,5 +132,5 @@ class VerletModel(keras.Model):
         p_old = tf.stack(qp_old[self.dim // 2 :], axis=-1)
         q_new, p_new = self.verlet_step(q_old, p_old)
         # Combine result of Verlet step into tensor of correct size
-        outputs = tf.concat([q_new, p_new], axis=-1)
+        outputs = tf.concat([q_new, p_new], -1)
         return outputs
