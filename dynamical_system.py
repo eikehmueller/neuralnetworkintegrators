@@ -255,6 +255,146 @@ class DoublePendulum(DynamicalSystem):
         return V_pot + T_kin
 
 
+class CoupledPendulums(DynamicalSystem):
+    """Two coupled pendulums coupled by a spring and moving in 2d plane.
+
+    The two pendulums are suspended from the ceiling, such that their anchor points are
+    a distance d_anchor apart. They are coupled by a sprint with spring constant k_spring,
+    such that the force between them is zero if they are hanging down vertically. Both pendulums
+    have the same mass and are connected to the ceiling by a massless rod of length L_rod.
+
+    If x_0 = theta_0 and x_1 = theta_1 are the angles of the two pendulums, then the positions of
+    the masses are:
+
+    x_0 = (L*sin(theta_0), -L*cos(theta_0))
+    x_1 = (d+L*sin(theta_1)), -L*cos(theta_1))
+
+    The potential energy is
+
+    V_pot = mass*g_grav*L_rod*( (1-cos(theta_0)) + (1-cos(theta_1)) )
+          + 1/2*k_spring*(|x_0-x_1|-d_anchor)^2
+
+    where g_grav is the gravitational acceleration and the kinetic energy is
+
+    T_kin = 1/2*mass*L_rod^2*( dot(theta_0)^2 + dot(theta_1)^2 )
+    """
+
+    def __init__(self, mass, L_rod, d_anchor, k_spring, g_grav=9.81):
+        """Create new instance of coupled pendulums class
+
+        :arg L_rod: length of rods
+        :arg d_anchor: distance between anchor points
+        :arg k_spring: spring constant
+        :arg g_grav: gravitational acceleration
+        """
+        super().__init__(2, mass)
+        self.L_rod = L_rod
+        self.d_anchor = d_anchor
+        self.k_spring = k_spring
+        self.g_grav = g_grav
+        # C-code snipped for computing the acceleration update
+        self.acceleration_header_code = """
+        #include "math.h"
+        """
+        self.acceleration_preamble_code = """
+        double phi;
+        double sin_x0;
+        double sin_x1;
+        double cos_x0;
+        double cos_x1;
+        double C_tmp;
+        double sin_x0_x1;
+        double z0;
+        double z1;
+        """
+        self.acceleration_update_code = f"""
+        sin_x0 = sin(x[0]);
+        sin_x1 = sin(x[1]);
+        cos_x0 = cos(x[0]);
+        cos_x1 = cos(x[1]);
+        sin_x0_x1 = sin(x[0]-x[1]);
+        z0 = {self.d_anchor} + {self.L_rod} * (sin_x1 - sin_x0);
+        z1 = {self.L_rod}* (cos_x1 - cos_x0);
+        phi = sqrt( z0*z0 + z1*z1 );
+        C_tmp = {self.k_spring} / ({self.L_rod} * {self.mass}) * ({self.d_anchor}/phi - 1.0);        
+        a[0] += C_tmp * ( -{self.d_anchor} * cos_x0 + {self.L_rod} * sin_x0_x1);
+        a[0] -= {self.g_grav} / {self.L_rod} * sin_x0;
+        a[1] += C_tmp * ( +{self.d_anchor} * cos_x1 - {self.L_rod} * sin_x0_x1);
+        a[1] -= {self.g_grav} / {self.L_rod} * sin_x1;
+        """
+
+    def _phi(self, theta_0, theta_1):
+        """Compute distance |x_0-x_1| = phi(theta_0, theta_1)
+
+        given by
+
+        phi(theta_0,theta_1) := |x_0-x_1| = sqrt( (d_anchor + L_rod*(sin(theta_1)-sin(theta_0)))^2
+                                                + L_rod^2*(cos(theta_1)-cos(theta_0))^2 )
+
+        :arg theta_0: angle of first bob
+        :arg theta_1: angle of second bob
+        """
+        return np.sqrt(
+            (self.d_anchor + self.L_rod * (np.sin(theta_1) - np.sin(theta_0))) ** 2
+            + self.L_rod**2 * (np.cos(theta_1) - np.cos(theta_0)) ** 2
+        )
+
+    def compute_scaled_force(self, x, v, force):
+        """Set the entries force[0] and force[1] of the force vector, scaled by the
+        momentum of I = inertia mass*L_rod^2
+
+        With theta_0 = x[0], theta_1, x[1], dot(theta_0) = v[0], dot(theta_1) = v[1],
+        the forces are gives:
+
+        F_0/I = -1/I*dV_pot/dtheta_0
+              = C * ( -d_anchor*cos(theta_0) + L_rod*sin(theta_0-theta_1) )
+                - g_grav/L_rod*sin(theta_0)
+
+        F_1/I = -1/I*dV_pot/dtheta_1
+              = C * ( d_anchor*cos(theta_0) - L_rod*sin(theta_0-theta_1) )
+                - g_grav/L_rod*sin(theta_1)
+
+        where
+
+        C = k_spring/(L_rod*mass)*(d_anchor-phi(theta_0,theta_1)) / phi(theta_0,theta_1)
+
+        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg force: Resulting force vector (2-dimensional array)
+        """
+        phi = self._phi(x[0], x[1])
+        C_tmp = self.k_spring / (self.L_rod * self.mass) * (self.d_anchor - phi) / phi
+        force[0] = C_tmp * (
+            -self.d_anchor * np.cos(x[0]) + self.L_rod * np.sin(x[0] - x[1])
+        ) - self.g_grav / self.L_rod * np.sin(x[0])
+        force[1] = C_tmp * (
+            self.d_anchor * np.cos(x[1]) - self.L_rod * np.sin(x[0] - x[1])
+        ) - self.g_grav / self.L_rod * np.sin(x[1])
+
+    def set_random_state(self, x, v):
+        """Draw angles and angular velocities
+
+        :arg x: Angles with vertical (2-dimensional array)
+        :arg v: Angular velocities (2-dimensional array)
+        """
+
+        x[0:2] = np.random.uniform(0, 2.0 * np.pi, size=(2))
+        v[0:2] = np.random.normal(0, 1, size=(2))
+
+    def energy(self, x, v):
+        """Compute total energy E = V_pot + T_kin
+
+        :arg x: Angles with vertical (2-dimensional array)
+        :arg v: Angular velocities(2-dimensional array)
+        """
+        V_pot = 0.5 * self.k_spring * (
+            self._phi(x[0], x[1]) - self.d_anchor
+        ) ** 2 + self.mass * self.g_grav * self.L_rod * (
+            2 - np.cos(x[0]) - np.cos(x[1])
+        )
+        T_kin = 0.5 * self.mass * self.L_rod**2 * (v[0] ** 2 + v[1] ** 2)
+        return V_pot + T_kin
+
+
 class LennartJonesSystem(DynamicalSystem):
     """Set of particles interacting via the truncated Lennart-Jones
     potential V(r) defined by
