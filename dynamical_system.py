@@ -7,18 +7,21 @@ import numpy as np
 
 
 class DynamicalSystem(ABC):
+    """Abstract base class for a dynamical system
+
+    Models a d-dimensional system of the following form:
+
+      dx_j/dt = v_j
+      dv_j/dt = F_j(x)/m_j
+
+    where j = 0,1,2,...,d-1
+    """
+
     def __init__(self, dim, mass):
-        """Abstract base class for a dynamical system
-
-        Models a d-dimensional system of the following form:
-
-          dx_j/dt = v_j
-          dv_j/dt = F_j(x)/m_j
-
-        where j = 0,1,2,...,d-1
+        """Construct new instance, set dimension and mass
 
         :arg dim: Spatial dimension of dynamical system
-        :arg mass: Mass of the system (can be a scalar in 1d)
+        :arg mass: Mass of the system (can be a scalar in 1d or a list in heigher dimensions)
         """
         self.dim = dim
         self.mass = mass
@@ -73,11 +76,14 @@ class DynamicalSystem(ABC):
 
 
 class HarmonicOscillator(DynamicalSystem):
-    def __init__(self, mass, k_spring):
-        """One-dimensional harmonic oscillator described by the equations
-        of motion
+    """One-dimensional harmonic oscillator described by the equations
+    of motion
 
-        dx_0/dt = v_0, dv_0/dt = -k/m_0*x_0
+    dx_0/dt = v_0, dv_0/dt = -k/m_0*x_0
+    """
+
+    def __init__(self, mass, k_spring):
+        """Construct new instance of harmonic oscillator class
 
         :arg mass: Particle mass
         :arg k_spring: Spring constant k
@@ -138,13 +144,16 @@ class HarmonicOscillator(DynamicalSystem):
 
 
 class DoublePendulum(DynamicalSystem):
+    """2-dimensional double pendulum described by the equations
+    of motion
+
+    dx_0/dt = v_0, dv_0/dt = [F1,F2] in scaled force section
+    """
+
     def __init__(self, mass, L1, L2, g=9.81):
-        """2-dimensional double pendulum described by the equations
-        of motion
+        """Construct new instance of double pendulum class.
 
-        dx_0/dt = v_0, dv_0/dt = [F1,F2] in scaled force section
-
-        :arg mass: Particle mass
+        :arg mass: Particle mass (list of length two)
         :arg g: gravitional force constant
         :arg L1: length of first segment of double pendulum
         :arg L2: length of second segment of double pendulum
@@ -179,7 +188,7 @@ class DoublePendulum(DynamicalSystem):
         )
 
     def compute_scaled_force(self, x, v, force):
-        """Set the entry force[0] of the force vector
+        """Set the entries force[0] and force[1] of the force vector
 
         :arg x: angles of bobs wrt vertical (2-dimensional array)
         :arg force: Resulting force vector (2-dimensional array)
@@ -212,6 +221,7 @@ class DoublePendulum(DynamicalSystem):
 
     def set_random_state(self, x, v):
         """Draw position and angular velocity from a normal distribution
+
         :arg x: Angles with vertical (2-dimensional array)
         :arg v: Angular velocities (2-dimensional array)
         """
@@ -246,6 +256,32 @@ class DoublePendulum(DynamicalSystem):
 
 
 class LennartJonesSystem(DynamicalSystem):
+    """Set of particles interacting via the truncated Lennart-Jones
+    potential V(r) defined by
+
+    V(r) = V_{LJ}(r) - V_{LJ}(r_c)
+
+    where V_{LJ}(r) = 4*epsilon*((1/r)^{12}-(1/r)^6)
+
+    All length scales are measured in units of a length scale sigma.
+    The parameters of the potential are:
+
+    * energy scale epsilon (V_{LJ}(1) = -epsilon)
+    * cutoff r_c
+
+    It is assumed that there are npart particles which move in a box of
+    size boxsize x boxsize with periodic boundary conditions.
+    The positions and velocities are ordered such that, for example, the
+    position vector is
+
+    x = [x_0,y_0,x_1,y_1,x_2,y_2,...]
+
+    where (x_j,y_j) is the position of particle j.
+
+    The typical kinetic energy scale, which is used to initialse the particle velocities
+    at random, can also be set explicitly.
+    """
+
     def __init__(
         self,
         mass,
@@ -256,30 +292,7 @@ class LennartJonesSystem(DynamicalSystem):
         rcutoff=3.0,
         fast_force=True,
     ):
-        """Set of particles interacting via the truncated Lennart-Jones
-        potential V(r) defined by
-
-        V(r) = V_{LJ}(r) - V_{LJ}(r_c)
-
-        where V_{LJ}(r) = 4*epsilon*((1/r)^{12}-(1/r)^6)
-
-        All length scales are measured in units of a length scale sigma.
-        The parameters of the potential are:
-
-        * energy scale epsilon (V_{LJ}(1) = -epsilon)
-        * cutoff r_c
-
-        It is assumed that there are npart particles which move in a box of
-        size boxsize x boxsize with periodic boundary conditions.
-        The positions and velocities are ordered such that, for example, the
-        position vector is
-
-        x = [x_0,y_0,x_1,y_1,x_2,y_2,...]
-
-        where (x_j,y_j) is the position of particle j.
-
-        The typical kinetic energy scale, which is used to initialse the particle velocities
-        at random, can also be set explicitly.
+        """Construct new instance of Lennart-Jones system
 
         :arg mass: Particle mass
         :arg npart: Number of particles
