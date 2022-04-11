@@ -133,7 +133,8 @@ class VerletIntegrator(TimeIntegrator):
                 print(c_sourcecode, file=f)
             # Compile source code (might have to adapt for different compiler)
             subprocess.run(
-                ["gcc", "-fPIC", "-shared", "-o", so_file, source_file], check=True
+                ["gcc", "-fPIC", "-shared", "-O3", "-o", so_file, source_file],
+                check=True,
             )
             self.c_velocity_verlet = ctypes.CDLL(so_file).velocity_verlet
             self.c_velocity_verlet.argtypes = [
@@ -285,7 +286,8 @@ class RK4Integrator(TimeIntegrator):
                 print(c_sourcecode, file=f)
             # Compile source code (might have to adapt for different compiler)
             subprocess.run(
-                ["gcc", "-fPIC", "-shared", "-o", so_file, source_file], check=True
+                ["gcc", "-fPIC", "-shared", "-O3", "-o", so_file, source_file],
+                check=True,
             )
             self.c_rk4 = ctypes.CDLL(so_file).rk4
             self.c_rk4.argtypes = [
