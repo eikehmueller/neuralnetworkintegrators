@@ -372,14 +372,31 @@ class CoupledPendulums(DynamicalSystem):
         ) - self.g_grav / self.L_rod * np.sin(x[1])
 
     def set_random_state(self, x, v):
-        """Draw angles and angular velocities
+        """Draw angles and angular velocities.
+
+        We assume that angles theta_0 and theta_1 stay in the range [-pi/4,+pi/4], and
+        that the energy never exceeds the maximum value
+
+        E_{max} = k_spring*L_rod^2 + mass*g_grav*L_rod*(2-sqrt(2))
 
         :arg x: Angles with vertical (2-dimensional array)
         :arg v: Angular velocities (2-dimensional array)
         """
 
-        x[0:2] = np.random.uniform(0, 2.0 * np.pi, size=(2))
-        v[0:2] = np.random.normal(0, 1, size=(2))
+        # Draw angle
+        x[0:2] = np.random.uniform(low=-0.25 * np.pi, high=+0.25 * np.pi, size=(2))
+        R_theta = np.sqrt(
+            self.k_spring
+            / (self.mass * self.L_rod**2)
+            * (2.0 * self.L_rod**2 - (self._phi(x[0], x[1]) - self.d_anchor) ** 2)
+            + 2.0
+            * self.g_grav
+            / self.L_rod
+            * (np.cos(x[0]) + np.cos(x[1]) - np.sqrt(2))
+        )
+        v[:] = R_theta
+        while v[0] ** 2 + v[1] ** 2 > R_theta**2:
+            v[0:2] = np.random.uniform(low=-R_theta, high=R_theta, size=(2))
 
     def energy(self, x, v):
         """Compute total energy E = V_pot + T_kin
