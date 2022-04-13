@@ -24,6 +24,7 @@ class DynamicalSystem(ABC):
         self.dH_header_code = None
         self.dH_preamble_code = None
         self.dH_update_code = None
+        self.separable = False
 
     @abstractmethod
     def compute_dHx(self, x, p, dHx):
@@ -93,6 +94,7 @@ class HarmonicOscillator(DynamicalSystem):
         :arg k_spring: Spring constant k
         """
         super().__init__(1, mass)
+        self.separable = True
         self.k_spring = k_spring
         # C-code snipped for computing the dH update
         self.dHx_update_code = f"dHx[0] = ({self.k_spring})*x[0];"
@@ -388,6 +390,7 @@ class CoupledPendulums(DynamicalSystem):
         :arg g_grav: gravitational acceleration
         """
         super().__init__(2, mass)
+        self.separable = True
         self.L_rod = L_rod
         self.d_anchor = d_anchor
         self.k_spring = k_spring
