@@ -462,14 +462,14 @@ class CoupledPendulums(DynamicalSystem):
 
         where
 
-        C = k_spring*L_rod*(d_anchor-phi(theta_0,theta_1)) / phi(theta_0,theta_1)
+        C = k_spring / (L_rod * mass) * (d_anchor-phi(theta_0,theta_1)) / phi(theta_0,theta_1)
 
         :arg x: angles of bobs wrt vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
         :arg dHx: resulting dH/dx
         """
         phi = self._phi(x[0], x[1])
-        C_tmp = self.k_spring * self.L_rod * (self.d_anchor - phi) / phi
+        C_tmp = self.k_spring / (self.L_rod * self.mass) * (self.d_anchor - phi) / phi
         dHx[0] = C_tmp * (
             self.d_anchor * np.cos(x[0]) - self.L_rod * np.sin(x[0] - x[1])
         ) + self.g_grav / self.L_rod * np.sin(x[0])
