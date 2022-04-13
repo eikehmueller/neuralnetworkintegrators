@@ -114,6 +114,23 @@ class ForwardEulerIntegrator(TimeIntegrator):
         """
         super().__init__(dynamical_system, dt)
         self.label = "ForwardEuler"
+        c_sourcecode = """
+        $DH_HEADER_CODE
+        void timestepper(double* x, double* p, int nsteps) {
+            double dHx[$DIM];
+            double dHp[$DIM];
+            $DH_PREAMBLE_CODE
+            for (int k=0;k<nsteps;++k) {
+                $DHX_UPDATE_CODE
+                $DHP_UPDATE_CODE
+                for (int j=0;j<$DIM;++j) {
+                    x[j] += ($DT)*dHp[j];
+                    p[j] -= ($DT)*dHx[j];
+                }
+            }
+        }
+        """
+        self.timestepper_library = self._generate_timestepper_library(c_sourcecode)
 
     def integrate(self, n_steps):
         """Carry out n_step timesteps, starting from the current set_state
@@ -121,14 +138,16 @@ class ForwardEulerIntegrator(TimeIntegrator):
 
         :arg steps: Number of integration steps
         """
-
-        for _ in range(n_steps):
-            # Compute forces
-            self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
-            self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
-            # Update position and momentum
-            self.x[:] += self.dt * self.dHp[:]
-            self.p[:] -= self.dt * self.dHx[:]
+        if self.fast_code:
+            self.timestepper_library(self.x, self.p, n_steps)
+        else:
+            for _ in range(n_steps):
+                # Compute forces
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+                # Update position and momentum
+                self.x[:] += self.dt * self.dHp[:]
+                self.p[:] -= self.dt * self.dHx[:]
 
 
 class VerletIntegrator(TimeIntegrator):
@@ -148,6 +167,10 @@ class VerletIntegrator(TimeIntegrator):
         :arg dt: time step size
         """
         super().__init__(dynamical_system, dt)
+        if not self.dynamical_system.separable:
+            raise Exception(
+                "Verlet integrator only support separable Hamiltonian systems"
+            )
         self.label = "Verlet"
         c_sourcecode = """
         $DH_HEADER_CODE
