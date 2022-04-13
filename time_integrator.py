@@ -16,20 +16,20 @@ class TimeIntegrator(ABC):
         self.dynamical_system = dynamical_system
         self.dt = dt
         self.x = np.zeros(dynamical_system.dim)
-        self.v = np.zeros(dynamical_system.dim)
-        self.acceleration = np.zeros(dynamical_system.dim)
+        self.p = np.zeros(dynamical_system.dim)
+        self.dHx = np.zeros(dynamical_system.dim)
+        self.dHp = np.zeros(dynamical_system.dim)
         self.label = None
 
-    def set_state(self, x, v):
+    def set_state(self, x, p):
         """Set the current state of the integrator to a specified
-        position and velocity.
+        position and momentum.
 
         :arg x: New position vector
-        :arg v: New velocity vector
+        :arg p: New momentum vector
         """
         self.x[:] = x[:]
-        self.v[:] = v[:]
-        self.dynamical_system.compute_acceleration(self.x, self.v, self.acceleration)
+        self.p[:] = p[:]
 
     @abstractmethod
     def integrate(self, n_steps):
@@ -42,15 +42,15 @@ class TimeIntegrator(ABC):
     def energy(self):
         """Return the energy of the underlying dynamical system for
         the current position and velocity"""
-        return self.dynamical_system.energy(self.x, self.v)
+        return self.dynamical_system.energy(self.x, self.p)
 
 
 class ForwardEulerIntegrator(TimeIntegrator):
     def __init__(self, dynamical_system, dt):
         """Forward Euler integrator given by
 
-        x_j^{(t+dt)} = x_j^{(t)} + dt*v_j
-        v_j^{(t+dt)} = v_j^{(t)} + dt*F_j(x^{(t)})/m_j
+        x_j^{(t+dt)} = x_j^{(t)} + dt*dH/dp_j (x^{(t)},p^{(t)})
+        p_j^{(t+dt)} = p_j^{(t)} - dt*dH/dx_j (x^{(t)},p^{(t)})
 
         :arg dynamical_system: Dynamical system to be integrated
         :arg dt: time step size
@@ -64,22 +64,28 @@ class ForwardEulerIntegrator(TimeIntegrator):
 
         :arg steps: Number of integration steps
         """
+
         for _ in range(n_steps):
-            self.x[:] += self.dt * self.v[:]
-            self.dynamical_system.apply_constraints(self.x)
-            self.v[:] += self.dt * self.acceleration[:]
-            # Compute acceleration at next timestep
-            self.dynamical_system.compute_acceleration(
-                self.x, self.v, self.acceleration
-            )
+            # Compute forces
+            self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+            self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+            # Update position and momentum
+            self.x[:] += self.dt * self.dHp[:]
+            self.p[:] -= self.dt * self.dHx[:]
 
 
 class VerletIntegrator(TimeIntegrator):
-    def __init__(self, dynamical_system, dt):
-        """Verlet integrator given by
+    """Verlet integrator for separable Hamiltonians
 
-        x_j^{(t+dt)} = x_j^{(t)} + dt*v_j + dt^2/2*F_j(x^{(t)})/m_j
-        v_j^{(t+dt)} = v_j^{(t)} + dt^2/2*(F_j(x^{(t)})/m_j+F_j(x^{(t+dt)})/m_j)
+    Performs the following update in every timestep:
+
+        p_j^{(t+dt/2)} = p_j^{(t)} - dt/2 * dH/dx(x^{(t)})
+        x_j^{(t+dt)}   = x_j^{(t)} + dt * dH/dp(p^{(t+dt/2)})
+        p_j^{(t+dt)}   = p_j^{(t+dt/2)} - dt/2 * dH/dx(x^{(t+dt)})
+    """
+
+    def __init__(self, dynamical_system, dt):
+        """Construct new instance
 
         :arg dynamical_system: Dynamical system to be integrated
         :arg dt: time step size
@@ -87,32 +93,36 @@ class VerletIntegrator(TimeIntegrator):
         super().__init__(dynamical_system, dt)
         self.label = "Verlet"
         # Check whether dynamical system has a C-code snippet for updating the acceleration
-        self.fast_code = self.dynamical_system.acceleration_update_code is not None
+        self.fast_code = self.dynamical_system.dHx_update_code is not None
         # If this is the case, auto-generate fast C code for the Velocity Verlet update
         if self.fast_code:
-            if self.dynamical_system.acceleration_preamble_code:
-                preamble = self.dynamical_system.acceleration_preamble_code
+            if self.dynamical_system.dH_preamble_code:
+                preamble = self.dynamical_system.dH_preamble_code
             else:
                 preamble = ""
-            if self.dynamical_system.acceleration_header_code:
-                header = self.dynamical_system.acceleration_header_code
+            if self.dynamical_system.dH_header_code:
+                header = self.dynamical_system.dH_header_code
             else:
                 header = ""
             c_sourcecode = string.Template(
                 """
-            $ACCELERATION_HEADER_CODE
-            void velocity_verlet(double* x, double* v, int nsteps) {
-                double a[$DIM];
-                $ACCELERATION_PREAMBLE_CODE
+            $DH_HEADER_CODE
+            void velocity_verlet(double* x, double* p, int nsteps) {
+                double dHx[$DIM];
+                double dHp[$DIM];
+                $DH_PREAMBLE_CODE
                 for (int k=0;k<nsteps;++k) {
-                    for (int j=0;j<$DIM;++j) a[j] = 0;
-                    $ACCELERATION_UPDATE_CODE
+                    $DHX_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
-                        x[j] += $DT*v[j] + 0.5*$DT*$DT*a[j];
+                        p[j] -= 0.5*($DT)*dHx[j];
                     }
-                    $ACCELERATION_UPDATE_CODE
+                    $DHP_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
-                        v[j] += 0.5*$DT*a[j];
+                        x[j] += ($DT)*dHp[j];
+                    }
+                    $DHX_UPDATE_CODE
+                    for (int j=0;j<$DIM;++j) {
+                        p[j] -= 0.5*($DT)*dHx[j];
                     }
                 }
             }
@@ -120,9 +130,10 @@ class VerletIntegrator(TimeIntegrator):
             ).substitute(
                 DIM=self.dynamical_system.dim,
                 DT=self.dt,
-                ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code,
-                ACCELERATION_HEADER_CODE=header,
-                ACCELERATION_PREAMBLE_CODE=preamble,
+                DHX_UPDATE_CODE=self.dynamical_system.dHx_update_code,
+                DHP_UPDATE_CODE=self.dynamical_system.dHp_update_code,
+                DH_HEADER_CODE=header,
+                DH_PREAMBLE_CODE=preamble,
             )
             sha = hashlib.md5()
             sha.update(c_sourcecode.encode())
@@ -150,38 +161,35 @@ class VerletIntegrator(TimeIntegrator):
         :arg steps: Number of integration steps
         """
         if self.fast_code:
-            self.c_velocity_verlet(self.x, self.v, n_steps)
+            self.c_velocity_verlet(self.x, self.p, n_steps)
         else:
             for _ in range(n_steps):
-                self.x[:] += (
-                    self.dt * self.v[:] + 0.5 * self.dt**2 * self.acceleration[:]
-                )
-                self.dynamical_system.apply_constraints(self.x)
-                self.v[:] += 0.5 * self.dt * self.acceleration[:]
-                self.dynamical_system.compute_acceleration(
-                    self.x, self.v, self.acceleration
-                )
-                self.v[:] += 0.5 * self.dt * self.acceleration[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.p[:] -= 0.5 * self.dt * self.dHx[:]
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+                self.x[:] += self.dt * self.dHp[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.p[:] -= 0.5 * self.dt * self.dHx[:]
 
 
 class RK4Integrator(TimeIntegrator):
     def __init__(self, dynamical_system, dt):
         """RK4 integrator given by
 
-        (k_{1,v})_j = v_j^{(t)}
-        (k_{1,x})_j = F_j(x^{(t)},v^{(t)})/m_j
+        (k_{1,x})_j = + dH/dp_j ( x^{(t)}, p^{(t)} )
+        (k_{1,p})_j = - dH/dx_j ( x^{(t)}, p^{(t)} )
 
-        (k_{2,v})_j = v_j^{(t)} + dt/2*(k_{1,v})_j
-        (k_{2,x})_j = F_j(x^{(t)}) + dt/2*k_{1,x}, v^{(t)} + dt/2*k_{1,v})/m_j
+        (k_{2,x})_j = + dH/dp_j ( x^{(t)} + dt/2*k_{1,x}, p^{(t)} + dt/2*k_{1,p} )
+        (k_{2,p})_j = - dH/dx_j ( x^{(t)} + dt/2*k_{1,x}, p^{(t)} + dt/2*k_{1,p} )
 
-        (k_{3,v})_j = v_j^{(t)} + dt/2*(k_{2,v})_j
-        (k_{3,x})_j = F_j(x^{(t)}) + dt/2*k_{2,x}, v^{(t)} + dt/2*k_{2,v})/m_j
+        (k_{3,x})_j = + dH/dp_j ( x^{(t)} + dt/2*k_{2,x}, p^{(t)} + dt/2*k_{2,p} )
+        (k_{3,p})_j = - dH/dx_j ( x^{(t)} + dt/2*k_{2,x}, p^{(t)} + dt/2*k_{2,p} )
 
-        (k_{4,v})_j = v_j^{(t)} + dt*(k_{3,v})_j
-        (k_{4,x})_j = F_j(x^{(t)}) + dt*k_{3,x}, v^{(t)} + dt*k_{3,v})/m_j
+        (k_{4,x})_j = + dH/dp_j ( x^{(t)} + dt*k_{3,x}, p^{(t)} + dt*k_{3,p} )
+        (k_{4,p})_j = - dH/dx_j ( x^{(t)} + dt*k_{3,x}, p^{(t)} + dt*k_{3,p} )
 
-        x^{(t+dt)} = x^{(t)} + dt/6*(k_{1,x}+2*k_{2,x}+2*k_{3,x}+k_{4,x})
-        v^{(t+dt)} = v^{(t)} + dt/6*(k_{1,v}+2*k_{2,v}+2*k_{3,v}+k_{4,v})
+        x^{(t+dt)} = x^{(t)} + dt/6*( k_{1,x} + 2*k_{2,x} + 2*k_{3,x} + k_{4,x} )
+        p^{(t+dt)} = p^{(t)} + dt/6*( k_{1,p} + 2*k_{2,p} + 2*k_{3,p} + k_{4,p} )
 
         :arg dynamical_system: Dynamical system to be integrated
         :arg dt: time step size
@@ -190,82 +198,83 @@ class RK4Integrator(TimeIntegrator):
         self.label = "RK4"
         # temporary fields
         self.k1x = np.zeros(self.dynamical_system.dim)
-        self.k1v = np.zeros(self.dynamical_system.dim)
+        self.k1p = np.zeros(self.dynamical_system.dim)
         self.k2x = np.zeros(self.dynamical_system.dim)
-        self.k2v = np.zeros(self.dynamical_system.dim)
+        self.k2p = np.zeros(self.dynamical_system.dim)
         self.k3x = np.zeros(self.dynamical_system.dim)
-        self.k3v = np.zeros(self.dynamical_system.dim)
+        self.k3p = np.zeros(self.dynamical_system.dim)
         self.k4x = np.zeros(self.dynamical_system.dim)
-        self.k4v = np.zeros(self.dynamical_system.dim)
+        self.k4p = np.zeros(self.dynamical_system.dim)
         # Check whether dynamical system has a C-code snippet for updating the acceleration
-        self.fast_code = self.dynamical_system.acceleration_update_code is not None
+        self.fast_code = self.dynamical_system.dHx_update_code is not None
         # If this is the case, auto-generate fast C code for the Velocity Verlet update
         if self.fast_code:
-            if self.dynamical_system.acceleration_preamble_code:
-                preamble = self.dynamical_system.acceleration_preamble_code
+            if self.dynamical_system.dH_preamble_code:
+                preamble = self.dynamical_system.dH_preamble_code
             else:
                 preamble = ""
-            if self.dynamical_system.acceleration_header_code:
-                header = self.dynamical_system.acceleration_header_code
+            if self.dynamical_system.dH_header_code:
+                header = self.dynamical_system.dH_header_code
             else:
                 header = ""
             c_sourcecode = string.Template(
                 """
-            $ACCELERATION_HEADER_CODE
-            void rk4(double* x, double* v, int nsteps) {
-                double a[$DIM];
+            $DH_HEADER_CODE
+            void rk4(double* x, double* p, int nsteps) {
+                double dHx[$DIM];
+                double dHp[$DIM];
                 double k1x[$DIM];
-                double k1v[$DIM];
+                double k1p[$DIM];
                 double k2x[$DIM];
-                double k2v[$DIM];
+                double k2p[$DIM];
                 double k3x[$DIM];
-                double k3v[$DIM];
+                double k3p[$DIM];
                 double k4x[$DIM];
-                double k4v[$DIM];
+                double k4p[$DIM];
                 double xt[$DIM];
-                double vt[$DIM];
-                $ACCELERATION_PREAMBLE_CODE
+                double pt[$DIM];
+                $DH_PREAMBLE_CODE
                 for (int k=0;k<nsteps;++k) {
                     // *** Stage 1 *** compute k1
-                    for (int j=0;j<$DIM;++j) a[j] = 0;
-                    $ACCELERATION_UPDATE_CODE
+                    $DHX_UPDATE_CODE
+                    $DHP_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
                         xt[j] = x[j];
-                        vt[j] = v[j];
-                        k1x[j] = v[j];
-                        k1v[j] = a[j];
-                        x[j] += 0.5*$DT*k1x[j];
-                        v[j] += 0.5*$DT*k1v[j];
-                        a[j] = 0;
+                        pt[j] = p[j];
+                        k1x[j] = + dHp[j];
+                        k1p[j] = - dHx[j];
+                        x[j] += 0.5*($DT)*k1x[j];
+                        p[j] += 0.5*($DT)*k1p[j];
                     }
                     // *** Stage 2 *** compute k2
-                    $ACCELERATION_UPDATE_CODE
+                    $DHX_UPDATE_CODE
+                    $DHP_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
-                        k2x[j] = v[j];
-                        k2v[j] = a[j];
-                        x[j] = xt[j] + 0.5*$DT*k2x[j];
-                        v[j] = vt[j] + 0.5*$DT*k2v[j];
-                        a[j] = 0;
+                        k2x[j] = + dHp[j];
+                        k2p[j] = - dHx[j];
+                        x[j] = xt[j] + 0.5*($DT)*k2x[j];
+                        p[j] = pt[j] + 0.5*($DT)*k2p[j];
                     }
                     // *** Stage 3 *** compute k3
-                    $ACCELERATION_UPDATE_CODE
+                    $DHX_UPDATE_CODE
+                    $DHP_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
-                        k3x[j] = v[j];
-                        k3v[j] = a[j];
-                        x[j] = xt[j] + $DT*k3x[j];
-                        v[j] = vt[j] + $DT*k3v[j];
-                        a[j] = 0;
+                        k3x[j] = + dHp[j];
+                        k3p[j] = - dHx[j];
+                        x[j] = xt[j] + ($DT)*k3x[j];
+                        p[j] = pt[j] + ($DT)*k3p[j];
                     }
                     // *** Stage 4 *** compute k4
-                    $ACCELERATION_UPDATE_CODE
+                    $DHX_UPDATE_CODE
+                    $DHP_UPDATE_CODE
                     for (int j=0;j<$DIM;++j) {
-                        k4x[j] = v[j];
-                        k4v[j] = a[j];
+                        k4x[j] = + dHp[j];
+                        k4p[j] = - dHx[j];
                     }
-                    // *** Final stage *** combine k's to compute x^{(t+dt)}
+                    // *** Final stage *** combine k's to compute x^{(t+dt)} and p^{(t+dt)}
                     for (int j=0;j<$DIM;++j) {
-                        x[j] = xt[j] + $DT/6.*(k1x[j]+2.*k2x[j]+2.*k3x[j]+k4x[j]);
-                        v[j] = vt[j] + $DT/6.*(k1v[j]+2.*k2v[j]+2.*k3v[j]+k4v[j]);
+                        x[j] = xt[j] + ($DT)/6.*(k1x[j]+2.*k2x[j]+2.*k3x[j]+k4x[j]);
+                        p[j] = pt[j] + ($DT)/6.*(k1p[j]+2.*k2p[j]+2.*k3p[j]+k4p[j]);
                     }
                 }
             }
@@ -273,9 +282,10 @@ class RK4Integrator(TimeIntegrator):
             ).substitute(
                 DIM=self.dynamical_system.dim,
                 DT=self.dt,
-                ACCELERATION_UPDATE_CODE=self.dynamical_system.acceleration_update_code,
-                ACCELERATION_HEADER_CODE=header,
-                ACCELERATION_PREAMBLE_CODE=preamble,
+                DHX_UPDATE_CODE=self.dynamical_system.dHx_update_code,
+                DHP_UPDATE_CODE=self.dynamical_system.dHp_update_code,
+                DH_HEADER_CODE=header,
+                DH_PREAMBLE_CODE=preamble,
             )
             sha = hashlib.md5()
             sha.update(c_sourcecode.encode())
@@ -303,53 +313,45 @@ class RK4Integrator(TimeIntegrator):
         :arg steps: Number of integration steps
         """
         if self.fast_code:
-            self.c_rk4(self.x, self.v, n_steps)
+            self.c_rk4(self.x, self.p, n_steps)
         else:
             xt = np.zeros(self.dynamical_system.dim)
-            vt = np.zeros(self.dynamical_system.dim)
+            pt = np.zeros(self.dynamical_system.dim)
             for _ in range(n_steps):
                 xt[:] = self.x[:]
-                vt[:] = self.v[:]
+                pt[:] = self.p[:]
                 # Stage 1: compute k1
-                self.k1x[:] = self.v[:]
-                self.k1v[:] = self.acceleration[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+                self.k1x[:] = +self.dHp[:]
+                self.k1p[:] = -self.dHx[:]
                 # Stage 2: compute k2
-                self.x[:] = xt[:] + 0.5 * self.dt * self.k1x[:]
-                self.v[:] = vt[:] + 0.5 * self.dt * self.k1v[:]
-                self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_acceleration(
-                    self.x, self.v, self.acceleration
-                )
-                self.k2x[:] = self.v[:]
-                self.k2v[:] = self.acceleration[:]
+                self.x[:] += 0.5 * self.dt * self.k1x[:]
+                self.p[:] += 0.5 * self.dt * self.k1p[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
                 # Stage 3: compute k3
+                self.k2x[:] = +self.dHp[:]
+                self.k2p[:] = -self.dHx[:]
                 self.x[:] = xt[:] + 0.5 * self.dt * self.k2x[:]
-                self.v[:] = vt[:] + 0.5 * self.dt * self.k2v[:]
-                self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_acceleration(
-                    self.x, self.v, self.acceleration
-                )
-                self.k3x[:] = self.v[:]
-                self.k3v[:] = self.acceleration[:]
+                self.p[:] = pt[:] + 0.5 * self.dt * self.k2p[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+                self.k3x[:] = +self.dHp[:]
+                self.k3p[:] = -self.dHx[:]
                 # Stage 4: compute k4
                 self.x[:] = xt[:] + self.dt * self.k3x[:]
-                self.v[:] = vt[:] + self.dt * self.k3v[:]
-                self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_acceleration(
-                    self.x, self.v, self.acceleration
-                )
-                self.k4x[:] = self.v[:]
-                self.k4v[:] = self.acceleration[:]
+                self.p[:] = pt[:] + self.dt * self.k3p[:]
+                self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
+                self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+                self.k4x[:] = +self.dHp[:]
+                self.k4p[:] = -self.dHx[:]
                 # Final stage: combine k's
                 self.x[:] = xt[:] + self.dt / 6.0 * (
                     self.k1x[:] + 2.0 * self.k2x[:] + 2.0 * self.k3x[:] + self.k4x[:]
                 )
-                self.v[:] = vt[:] + self.dt / 6.0 * (
-                    self.k1v[:] + 2.0 * self.k2v[:] + 2.0 * self.k3v[:] + self.k4v[:]
-                )
-                self.dynamical_system.apply_constraints(self.x)
-                self.dynamical_system.compute_acceleration(
-                    self.x, self.v, self.acceleration
+                self.p[:] = pt[:] + self.dt / 6.0 * (
+                    self.k1p[:] + 2.0 * self.k2p[:] + 2.0 * self.k3p[:] + self.k4p[:]
                 )
 
 
@@ -371,6 +373,6 @@ class ExactIntegrator(TimeIntegrator):
 
         :arg steps: Number of integration steps
         """
-        self.x[:], self.v[:] = self.dynamical_system.forward_map(
-            self.x[:], self.v[:], n_steps * self.dt
+        self.x[:], self.p[:] = self.dynamical_system.forward_map(
+            self.x[:], self.p[:], n_steps * self.dt
         )
