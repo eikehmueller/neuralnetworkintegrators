@@ -419,11 +419,11 @@ class CoupledPendulums(DynamicalSystem):
         z0 = {self.d_anchor} + {self.L_rod} * (sin_x1 - sin_x0);
         z1 = {self.L_rod}* (cos_x1 - cos_x0);
         phi = sqrt( z0*z0 + z1*z1 );
-        C_tmp = {self.k_spring} / ({self.L_rod} * {self.mass}) * ({self.d_anchor}/phi - 1.0);        
-        dHx[0] = C_tmp * ( -({self.d_anchor}) * cos_x0 + {self.L_rod} * sin_x0_x1)
-               - {self.g_grav} / {self.L_rod} * sin_x0;
-        dHx[1] = C_tmp * ( {self.d_anchor} * cos_x1 - ({self.L_rod}) * sin_x0_x1)
-               - {self.g_grav} / {self.L_rod} * sin_x1;
+        C_tmp = {self.k_spring} * {self.L_rod} * ({self.d_anchor}/phi - 1.0);        
+        dHx[0] = C_tmp * ( ({self.d_anchor}) * cos_x0 - {self.L_rod} * sin_x0_x1)
+               + {self.g_grav} / {self.L_rod} * sin_x0;
+        dHx[1] = C_tmp * ( -{self.d_anchor} * cos_x1 + ({self.L_rod}) * sin_x0_x1)
+               + {self.g_grav} / {self.L_rod} * sin_x1;
         """
         self.dHp_update_code = f"""
         dHp[0] = p[0] / ({self.mass}*{self.L_rod}*{self.L_rod});
@@ -469,7 +469,7 @@ class CoupledPendulums(DynamicalSystem):
         :arg dHx: resulting dH/dx
         """
         phi = self._phi(x[0], x[1])
-        C_tmp = self.k_spring / (self.L_rod * self.mass) * (self.d_anchor - phi) / phi
+        C_tmp = self.k_spring * self.L_rod * (self.d_anchor - phi) / phi
         dHx[0] = C_tmp * (
             self.d_anchor * np.cos(x[0]) - self.L_rod * np.sin(x[0] - x[1])
         ) + self.g_grav / self.L_rod * np.sin(x[0])
