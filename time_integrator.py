@@ -3,6 +3,7 @@ import string
 import subprocess
 import ctypes
 import hashlib
+import os
 import numpy as np
 
 
@@ -77,9 +78,12 @@ class TimeIntegrator(ABC):
             )
             sha = hashlib.md5()
             sha.update(c_substituted_sourcecode.encode())
+            directory = "./generated_code/"
+            if not os.stat(directory):
+                os.mkdir(directory)
             filestem = "./timestepper_" + sha.hexdigest()
-            so_file = filestem + ".so"
-            source_file = filestem + ".c"
+            so_file = directory + "/" + filestem + ".so"
+            source_file = directory + "/" + filestem + ".c"
             with open(source_file, "w", encoding="utf8") as f:
                 print(c_substituted_sourcecode, file=f)
             # Compile source code (might have to adapt for different compiler)
