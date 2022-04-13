@@ -44,6 +44,59 @@ class TimeIntegrator(ABC):
         the current position and velocity"""
         return self.dynamical_system.energy(self.x, self.p)
 
+    def _generate_timestepper_library(self, c_sourcecode):
+        """Generate shared library from c source code
+
+        The generated library will implement the timestepper. Returns ctypes wrapper
+        which allows calling the function
+
+          void timestepper(double* x, double* p, int nsteps) { ... }
+
+        :arg c_sourcecode: C source code
+        """
+        # Check whether dynamical system has a C-code snippet for updating the acceleration
+        self.fast_code = self.dynamical_system.dHx_update_code is not None
+        # If this is the case, auto-generate fast C code for the Velocity Verlet update
+
+        if self.fast_code:
+            if self.dynamical_system.dH_preamble_code:
+                preamble = self.dynamical_system.dH_preamble_code
+            else:
+                preamble = ""
+            if self.dynamical_system.dH_header_code:
+                header = self.dynamical_system.dH_header_code
+            else:
+                header = ""
+            c_substituted_sourcecode = string.Template(c_sourcecode).substitute(
+                DIM=self.dynamical_system.dim,
+                DT=self.dt,
+                DHX_UPDATE_CODE=self.dynamical_system.dHx_update_code,
+                DHP_UPDATE_CODE=self.dynamical_system.dHp_update_code,
+                DH_HEADER_CODE=header,
+                DH_PREAMBLE_CODE=preamble,
+            )
+            sha = hashlib.md5()
+            sha.update(c_substituted_sourcecode.encode())
+            filestem = "./timestepper_" + sha.hexdigest()
+            so_file = filestem + ".so"
+            source_file = filestem + ".c"
+            with open(source_file, "w", encoding="utf8") as f:
+                print(c_substituted_sourcecode, file=f)
+            # Compile source code (might have to adapt for different compiler)
+            subprocess.run(
+                ["gcc", "-fPIC", "-shared", "-O3", "-o", so_file, source_file],
+                check=True,
+            )
+            timestepper_lib = ctypes.CDLL(so_file).timestepper
+            timestepper_lib.argtypes = [
+                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+                np.ctypeslib.c_intp,
+            ]
+            return timestepper_lib
+        else:
+            return None
+
 
 class ForwardEulerIntegrator(TimeIntegrator):
     def __init__(self, dynamical_system, dt):
@@ -92,67 +145,29 @@ class VerletIntegrator(TimeIntegrator):
         """
         super().__init__(dynamical_system, dt)
         self.label = "Verlet"
-        # Check whether dynamical system has a C-code snippet for updating the acceleration
-        self.fast_code = self.dynamical_system.dHx_update_code is not None
-        # If this is the case, auto-generate fast C code for the Velocity Verlet update
-        if self.fast_code:
-            if self.dynamical_system.dH_preamble_code:
-                preamble = self.dynamical_system.dH_preamble_code
-            else:
-                preamble = ""
-            if self.dynamical_system.dH_header_code:
-                header = self.dynamical_system.dH_header_code
-            else:
-                header = ""
-            c_sourcecode = string.Template(
-                """
-            $DH_HEADER_CODE
-            void velocity_verlet(double* x, double* p, int nsteps) {
-                double dHx[$DIM];
-                double dHp[$DIM];
-                $DH_PREAMBLE_CODE
-                for (int k=0;k<nsteps;++k) {
-                    $DHX_UPDATE_CODE
-                    for (int j=0;j<$DIM;++j) {
-                        p[j] -= 0.5*($DT)*dHx[j];
-                    }
-                    $DHP_UPDATE_CODE
-                    for (int j=0;j<$DIM;++j) {
-                        x[j] += ($DT)*dHp[j];
-                    }
-                    $DHX_UPDATE_CODE
-                    for (int j=0;j<$DIM;++j) {
-                        p[j] -= 0.5*($DT)*dHx[j];
-                    }
+        c_sourcecode = """
+        $DH_HEADER_CODE
+        void timestepper(double* x, double* p, int nsteps) {
+            double dHx[$DIM];
+            double dHp[$DIM];
+            $DH_PREAMBLE_CODE
+            for (int k=0;k<nsteps;++k) {
+                $DHX_UPDATE_CODE
+                for (int j=0;j<$DIM;++j) {
+                    p[j] -= 0.5*($DT)*dHx[j];
+                }
+                $DHP_UPDATE_CODE
+                for (int j=0;j<$DIM;++j) {
+                    x[j] += ($DT)*dHp[j];
+                }
+                $DHX_UPDATE_CODE
+                for (int j=0;j<$DIM;++j) {
+                    p[j] -= 0.5*($DT)*dHx[j];
                 }
             }
-            """
-            ).substitute(
-                DIM=self.dynamical_system.dim,
-                DT=self.dt,
-                DHX_UPDATE_CODE=self.dynamical_system.dHx_update_code,
-                DHP_UPDATE_CODE=self.dynamical_system.dHp_update_code,
-                DH_HEADER_CODE=header,
-                DH_PREAMBLE_CODE=preamble,
-            )
-            sha = hashlib.md5()
-            sha.update(c_sourcecode.encode())
-            filestem = "./velocity_verlet_" + sha.hexdigest()
-            so_file = filestem + ".so"
-            source_file = filestem + ".c"
-            with open(source_file, "w", encoding="utf8") as f:
-                print(c_sourcecode, file=f)
-            # Compile source code (might have to adapt for different compiler)
-            subprocess.run(
-                ["gcc", "-fPIC", "-shared", "-O3", "-o", so_file, source_file],
-                check=True,
-            )
-            self.c_velocity_verlet = ctypes.CDLL(so_file).velocity_verlet
-            self.c_velocity_verlet.argtypes = [
-                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-                np.ctypeslib.c_intp,
-            ]
+        }
+        """
+        self.timestepper_library = self._generate_timestepper_library(c_sourcecode)
 
     def integrate(self, n_steps):
         """Carry out n_step timesteps, starting from the current set_state
@@ -161,7 +176,7 @@ class VerletIntegrator(TimeIntegrator):
         :arg steps: Number of integration steps
         """
         if self.fast_code:
-            self.c_velocity_verlet(self.x, self.p, n_steps)
+            self.timestepper_library(self.x, self.p, n_steps)
         else:
             for _ in range(n_steps):
                 self.dynamical_system.compute_dHx(self.x, self.p, self.dHx)
@@ -205,22 +220,9 @@ class RK4Integrator(TimeIntegrator):
         self.k3p = np.zeros(self.dynamical_system.dim)
         self.k4x = np.zeros(self.dynamical_system.dim)
         self.k4p = np.zeros(self.dynamical_system.dim)
-        # Check whether dynamical system has a C-code snippet for updating the acceleration
-        self.fast_code = self.dynamical_system.dHx_update_code is not None
-        # If this is the case, auto-generate fast C code for the Velocity Verlet update
-        if self.fast_code:
-            if self.dynamical_system.dH_preamble_code:
-                preamble = self.dynamical_system.dH_preamble_code
-            else:
-                preamble = ""
-            if self.dynamical_system.dH_header_code:
-                header = self.dynamical_system.dH_header_code
-            else:
-                header = ""
-            c_sourcecode = string.Template(
-                """
+        c_sourcecode = """
             $DH_HEADER_CODE
-            void rk4(double* x, double* p, int nsteps) {
+            void timestepper(double* x, double* p, int nsteps) {
                 double dHx[$DIM];
                 double dHp[$DIM];
                 double k1x[$DIM];
@@ -279,32 +281,7 @@ class RK4Integrator(TimeIntegrator):
                 }
             }
             """
-            ).substitute(
-                DIM=self.dynamical_system.dim,
-                DT=self.dt,
-                DHX_UPDATE_CODE=self.dynamical_system.dHx_update_code,
-                DHP_UPDATE_CODE=self.dynamical_system.dHp_update_code,
-                DH_HEADER_CODE=header,
-                DH_PREAMBLE_CODE=preamble,
-            )
-            sha = hashlib.md5()
-            sha.update(c_sourcecode.encode())
-            filestem = "./rk4_" + sha.hexdigest()
-            so_file = filestem + ".so"
-            source_file = filestem + ".c"
-            with open(source_file, "w", encoding="utf8") as f:
-                print(c_sourcecode, file=f)
-            # Compile source code (might have to adapt for different compiler)
-            subprocess.run(
-                ["gcc", "-fPIC", "-shared", "-O3", "-o", so_file, source_file],
-                check=True,
-            )
-            self.c_rk4 = ctypes.CDLL(so_file).rk4
-            self.c_rk4.argtypes = [
-                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-                np.ctypeslib.c_intp,
-            ]
+        self.timestepper_library = self._generate_timestepper_library(c_sourcecode)
 
     def integrate(self, n_steps):
         """Carry out n_step timesteps, starting from the current set_state
@@ -313,7 +290,7 @@ class RK4Integrator(TimeIntegrator):
         :arg steps: Number of integration steps
         """
         if self.fast_code:
-            self.c_rk4(self.x, self.p, n_steps)
+            self.timestepper_library(self.x, self.p, n_steps)
         else:
             xt = np.zeros(self.dynamical_system.dim)
             pt = np.zeros(self.dynamical_system.dim)
