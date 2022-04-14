@@ -7,8 +7,8 @@ class DynamicalSystem(ABC):
 
     Models a d-dimensional system of the following form:
 
-      dx_j/dt = +dH/dp_j(x,p)
-      dp_j/dt = -dH/dx_j(x,p)
+      dq_j/dt = +dH/dp_j(q,p)
+      dp_j/dt = -dH/dq_j(q,p)
 
     where j = 0,1,2,...,d-1
     """
@@ -27,48 +27,48 @@ class DynamicalSystem(ABC):
         self.separable = False
 
     @abstractmethod
-    def compute_dHx(self, x, p, dHx):
+    def compute_dHq(self, q, p, dHq):
         """Compute the derivative of the Hamiltonian with respect to position
 
-        :arg x: Particle positions x (d-dimensional array)
+        :arg q: Particle positions q (d-dimensional array)
         :arg p: Particle momenta (d-dimensional array)
-        :arg dHx: Resulting vector dH/dx (d-dimensional array)
+        :arg dHq: Resulting vector dH/dq (d-dimensional array)
         :arg dHp: Resulting vector dH/dp (d-dimensional array)
         """
 
     @abstractmethod
-    def compute_dHp(self, x, p, dHp):
+    def compute_dHp(self, q, p, dHp):
         """Compute the derivative of the Hamiltonian with respect to momentum
 
-        :arg x: Particle positions x (d-dimensional array)
+        :arg q: Particle positions q (d-dimensional array)
         :arg p: Particle momenta (d-dimensional array)
         :arg dHp: Resulting vector dH/dp (d-dimensional array)
         """
 
     @abstractmethod
-    def set_random_state(self, x, p):
-        """Set the position x and momentum p to random values. This will be used
+    def set_random_state(self, q, p):
+        """Set the position q and momentum p to random values. This will be used
         during the training stage to pick a suitable set of initial values
 
-        :arg x: Positions (d-dimensional array)
+        :arg q: Positions (d-dimensional array)
         :arg p: Momenta (d-dimensional array)
         """
 
     @abstractmethod
-    def energy(self, x, p):
+    def energy(self, q, p):
         """Return the total energy for given positions and momenta
 
-        :arg x: Positions (d-dimensional array)
+        :arg q: Positions (d-dimensional array)
         :arg p: Canonical momenta (d-dimensional array)
         """
 
-    def forward_map(self, x0, p0, t):
+    def forward_map(self, q0, p0, t):
         """Exact forward map
 
-        Compute position x(t) and momenta v(t), given initial position x(0) and momentum p(0).
+        Compute position q(t) and momenta v(t), given initial position q(0) and momentum p(0).
         This will only be implemented if the specific dynamical system has an analytical solution
 
-        :arg x0: initial position x(0)
+        :arg q0: initial position q(0)
         :arg p0: initial momentum p(0)
         :arg t: final time
         """
@@ -80,11 +80,11 @@ class HarmonicOscillator(DynamicalSystem):
 
     The system is described by the Hamiltonian
 
-    H(x,p) = p^2/(2*m) + 1/2*k_{spring}*x^2
+    H(q,p) = p^2/(2*m) + 1/2*k_{spring}*q^2
 
     which results in the following equations of motion:
 
-    dx/dt = p/m, dp/dt = -k*x
+    dq/dt = p/m, dp/dt = -k*q
     """
 
     def __init__(self, mass, k_spring):
@@ -97,69 +97,69 @@ class HarmonicOscillator(DynamicalSystem):
         self.separable = True
         self.k_spring = k_spring
         # C-code snipped for computing the dH update
-        self.dHx_update_code = f"dHx[0] = ({self.k_spring})*x[0];"
+        self.dHq_update_code = f"dHq[0] = ({self.k_spring})*q[0];"
         self.dHp_update_code = f"dHp[0] = 1.0/({self.mass})*p[0];"
 
-    def compute_dHx(self, x, p, dHx):
-        """Compute dH/dx
+    def compute_dHq(self, q, p, dHq):
+        """Compute dH/dq
 
-        Returns dH/dx = k_{spring}*x
+        Returns dH/dq = k_{spring}*q
 
-        :arg x: Particle position x (1-dimensional array)
-        :arg p: Particle momentum x (1-dimensional array)
-        :arg dHx: Resulting dH/dx
+        :arg q: Particle position q (1-dimensional array)
+        :arg p: Particle momentum p (1-dimensional array)
+        :arg dHq: Resulting dH/dq
         """
-        dHx[0] = self.k_spring * x[0]
+        dHq[0] = self.k_spring * q[0]
 
-    def compute_dHp(self, x, p, dHp):
+    def compute_dHp(self, q, p, dHp):
         """Compute dH/dp
 
         Returns dH/dp = p/mass
 
-        :arg x: Particle position x (1-dimensional array)
-        :arg p: Particle momentum x (1-dimensional array)
+        :arg q: Particle position q (1-dimensional array)
+        :arg p: Particle momentum q (1-dimensional array)
         :arg dHp: Resulting dH/dp
         """
         dHp[0] = p[0] / self.mass
 
-    def set_random_state(self, x, p):
+    def set_random_state(self, q, p):
         """Draw position and momentum from a normal distribution
-        :arg x: Position (1-dimensional array)
+        :arg q: Position (1-dimensional array)
         :arg p: Momentum (1-dimensional array)
         """
-        x[0] = np.random.normal(0, 1)
+        q[0] = np.random.normal(0, 1)
         p[0] = np.random.normal(0, 1)
 
-    def energy(self, x, p):
-        """Compute total energy E = p^2/(2*m) + 1/2*k*x^2
+    def energy(self, q, p):
+        """Compute total energy E = p^2/(2*m) + 1/2*k*q^2
 
-        :arg x: Position (1-dimensional array)
+        :arg q: Position (1-dimensional array)
         :arg p: Momentum (1-dimensional array)
         """
-        return 0.5 * p[0] ** 2 / self.mass + 0.5 * self.k_spring * x[0] ** 2
+        return 0.5 * p[0] ** 2 / self.mass + 0.5 * self.k_spring * q[0] ** 2
 
-    def forward_map(self, x0, p0, t):
+    def forward_map(self, q0, p0, t):
         """Exact forward map
 
-        Compute position x(t) and momentum p(t), given initial position x(0) and momentum p(0).
+        Compute position q(t) and momentum p(t), given initial position q(0) and momentum p(0).
 
         For this use:
 
-        x(t) = x(0)*cos(omega*t) + p(0)/(m*omega)*sin(omega*t)
-        p(t) = -m*x(0)*omega*sin(omega*t) + p(0)*cos(omega*t)
+        q(t) = q(0)*cos(omega*t) + p(0)/(m*omega)*sin(omega*t)
+        p(t) = -m*q(0)*omega*sin(omega*t) + p(0)*cos(omega*t)
 
         with omega = sqrt(k/m), k = k_{spring}, m = mass
 
-        :arg x0: initial position x(0)
+        :arg q0: initial position q(0)
         :arg p0: initial momentum p(0)
         :arg t: final time
         """
         omega = np.sqrt(self.k_spring / self.mass)
         cos_omegat = np.cos(omega * t)
         sin_omegat = np.sin(omega * t)
-        x = np.array(x0[0] * cos_omegat + p0[0] / (omega * self.mass) * sin_omegat)
-        p = np.array(-x0[0] * self.mass * omega * sin_omegat + p0[0] * cos_omegat)
-        return x, p
+        q = np.array(q0[0] * cos_omegat + p0[0] / (omega * self.mass) * sin_omegat)
+        p = np.array(-q0[0] * self.mass * omega * sin_omegat + p0[0] * cos_omegat)
+        return q, p
 
 
 class DoublePendulum(DynamicalSystem):
@@ -208,58 +208,58 @@ class DoublePendulum(DynamicalSystem):
         #include "math.h"
         """
         self.dH_preamble_code = """
-        double cos_x0_x1;
-        double sin_x0_x1;
-        double sin_2_x0_x1;
-        double sin_x0;
-        double sin_x1;
+        double cos_q0_q1;
+        double sin_q0_q1;
+        double sin_2_q0_q1;
+        double sin_q0;
+        double sin_q1;
         """
-        self.dHx_update_code = f"""
-        cos_x0_x1 = cos(x[0]-x[1]);
-        sin_x0_x1 = sin(x[0]-x[1]);
-        sin_2_x0_x1 = sin(2.*(x[0]-x[1]));
-        sin_x0 = sin(x[0]);
-        sin_x1 = sin(x[1]);
-        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_x0_x1*sin_x0_x1);
-        h0 = p[0]*p[1]*sin_x0_x1 * kappa;
+        self.dHq_update_code = f"""
+        cos_q0_q1 = cos(q[0]-q[1]);
+        sin_q0_q1 = sin(q[0]-q[1]);
+        sin_2_q0_q1 = sin(2.*(q[0]-q[1]));
+        sin_q0 = sin(q[0]);
+        sin_q1 = sin(q[1]);
+        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_q0_q1*sin_q0_q1);
+        h0 = p[0]*p[1]*sin_q0_q1 * kappa;
         h1 = 0.5 * ({self.mass[1]}*{self.L1}*{self.L1}*p[0]*p[0] 
              + ({self.mass[0]}+{self.mass[1]}) * {self.L0}*{self.L0}*p[1]*p[1]
-             - 2*{self.mass[1]}*{self.L0}*{self.L1}*p[0]*p[1]*cos_x0_x1) * kappa * kappa;
-        dHx[0] = ({self.mass[0]}+{self.mass[0]})*{self.g_grav}*{self.L0}*sin_x0
-                  + h0 - h1 * sin_2_x0_x1;
-        dHx[1] = {self.mass[1]}*{self.g_grav}*{self.L1}*sin_x1 
-                  - h0 + h1 * sin_2_x0_x1;
+             - 2*{self.mass[1]}*{self.L0}*{self.L1}*p[0]*p[1]*cos_q0_q1) * kappa * kappa;
+        dHq[0] = ({self.mass[0]}+{self.mass[0]})*{self.g_grav}*{self.L0}*sin_q0
+                  + h0 - h1 * sin_2_q0_q1;
+        dHq[1] = {self.mass[1]}*{self.g_grav}*{self.L1}*sin_q1 
+                  - h0 + h1 * sin_2_q0_q1;
         """
         self.dHp_update_code = f"""
-        cos_x0_x1 = cos(x[0]-x[1]);
-        sin_x0_x1 = sin(x[0]-x[1]);
-        sin_2_x0_x1 = sin(2.*(x[0]-x[1]));
-        sin_x0 = sin(x[0]);
-        sin_x1 = sin(x[1]);
-        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_x0_x1*sin_x0_x1);
-        dHp[0] = ( {self.L1}*p[0] - {self.L0}*p[1]*cos_x0_x1 ) * kappa / {self.L0};
-        dHp[1] = ( -{self.L1}*p[0]*cos_x0_x1 
+        cos_q0_q1 = cos(q[0]-q[1]);
+        sin_q0_q1 = sin(q[0]-q[1]);
+        sin_2_q0_q1 = sin(2.*(q[0]-q[1]));
+        sin_q0 = sin(q[0]);
+        sin_q1 = sin(q[1]);
+        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_q0_q1*sin_q0_q1);
+        dHp[0] = ( {self.L1}*p[0] - {self.L0}*p[1]*cos_q0_q1 ) * kappa / {self.L0};
+        dHp[1] = ( -{self.L1}*p[0]*cos_q0_q1 
                     + (1.+{self.mass[0]}/{self.mass[1]})*{self.L0}*p[1] ) * kappa / {self.L1};
         """
 
-    def _kappa(self, x):
+    def _kappa(self, q):
         """Compute kappa = 1 / (L_0 * L_1 * (m_0 + m_1*sin^2(theta_0-theta_1)))
 
-        :arg x: Position angles (2-dimensional array)
+        :arg q: Position angles (2-dimensional array)
         """
         return 1 / (
-            self.L0 * self.L1 * (self.mass[0] + self.mass[1]) * np.sin(x[0] - x[1]) ** 2
+            self.L0 * self.L1 * (self.mass[0] + self.mass[1]) * np.sin(q[0] - q[1]) ** 2
         )
 
-    def compute_dHx(self, x, p, dHx):
-        """Compute dH/dx
+    def compute_dHq(self, q, p, dHq):
+        """Compute dH/dq
 
-        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg q: angles of bobs wrt vertical (2-dimensional array)
         :arg p: corresponding canonical momenta (2-dimensional array)
-        :arg dHx: resulting dH/dx
+        :arg dHq: resulting dH/dq
         """
-        kappa = self._kappa(x)
-        h0 = p[0] * p[1] * np.sin(x[0] - x[1]) * kappa
+        kappa = self._kappa(q)
+        h0 = p[0] * p[1] * np.sin(q[0] - q[1]) * kappa
         h1 = (
             (
                 self.mass[1] * self.L1**2 * p[0] * p[0]
@@ -270,54 +270,54 @@ class DoublePendulum(DynamicalSystem):
                 * self.L1
                 * p[0]
                 * p[1]
-                * np.cos(x[0] - x[1])
+                * np.cos(q[0] - q[1])
             )
             * kappa**2
             / 2
         )
 
-        dHx[0] = (
-            (self.mass[0] + self.mass[0]) * self.g_grav * self.L0 * np.sin(x[0])
+        dHq[0] = (
+            (self.mass[0] + self.mass[0]) * self.g_grav * self.L0 * np.sin(q[0])
             + h0
-            - h1 * np.sin(2 * (x[0] - x[1]))
+            - h1 * np.sin(2 * (q[0] - q[1]))
         )
-        dHx[1] = (
-            self.mass[1] * self.g_grav * self.L1 * np.sin(x[1])
+        dHq[1] = (
+            self.mass[1] * self.g_grav * self.L1 * np.sin(q[1])
             - h0
-            + h1 * np.sin(2 * (x[0] - x[1]))
+            + h1 * np.sin(2 * (q[0] - q[1]))
         )
 
-    def compute_dHp(self, x, p, dHp):
+    def compute_dHp(self, q, p, dHp):
         """Compute dH/dp
 
-        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg q: angles of bobs wrt vertical (2-dimensional array)
         :arg p: corresponding canonical momenta (2-dimensional array)
-        :arg dHx: resulting dH/dp
+        :arg dHq: resulting dH/dp
         """
-        kappa = self._kappa(x)
+        kappa = self._kappa(q)
         dHp[0] = (
-            (self.L1 * p[0] - self.L0 * p[1] * np.cos(x[0] - x[1])) * kappa / self.L0
+            (self.L1 * p[0] - self.L0 * p[1] * np.cos(q[0] - q[1])) * kappa / self.L0
         )
         dHp[1] = (
             (
-                -self.L1 * p[0] * np.cos(x[0] - x[1])
+                -self.L1 * p[0] * np.cos(q[0] - q[1])
                 + (1.0 + self.mass[0] / self.mass[1]) * self.L0 * p[1]
             )
             * kappa
             / self.L1
         )
 
-    def set_random_state(self, x, p):
+    def set_random_state(self, q, p):
         """Draw position and angular velocity from a normal distribution
 
-        :arg x: Angles with vertical (2-dimensional array)
+        :arg q: Angles with vertical (2-dimensional array)
         :arg p: Canonical momenta (2-dimensional array)
         """
 
-        x[0:2] = np.random.normal(0, 0.5 * np.pi, size=(2))  # angles of two bobs
+        q[0:2] = np.random.normal(0, 0.5 * np.pi, size=(2))  # angles of two bobs
         p[0:2] = np.random.normal(0, 1, size=(2))  # canonical momenta of two bobs
 
-    def energy(self, x, p):
+    def energy(self, q, p):
         """Compute total energy
 
         The potential and kinetic energy is given by
@@ -328,22 +328,22 @@ class DoublePendulum(DynamicalSystem):
 
           with kappa as defined above
 
-        :arg x: Angles with vertical (2-dimensional array)
+        :arg q: Angles with vertical (2-dimensional array)
         :arg p: Corresponding canonical momenta (2-dimensional array)
         """
 
         # Potential Energy
         V_pot = self.g_grav * (
-            (self.mass[0] + self.mass[1]) * self.L0 * (1 - np.cos(x[0]))
-            + self.mass[1] * self.L1 * (1 - np.cos(x[1]))
+            (self.mass[0] + self.mass[1]) * self.L0 * (1 - np.cos(q[0]))
+            + self.mass[1] * self.L1 * (1 - np.cos(q[1]))
         )
         T_kin = 0.5 * (
             (
                 self.L1**2 * p[0] ** 2
                 + (1 + self.mass[0] / self.mass[1]) * self.L0**2 * p[1] ** 2
-                - 2 * self.L0 * self.L1 * p[0] * p[1] * np.cos(x[0] - x[1])
+                - 2 * self.L0 * self.L1 * p[0] * p[1] * np.cos(q[0] - q[1])
             )
-            * self._kappa(x)
+            * self._kappa(q)
             / (self.L0 * self.L1)
         )
         # Kinetic Energy
@@ -359,16 +359,16 @@ class CoupledPendulums(DynamicalSystem):
     such that the force between them is zero if they are hanging down vertically. Both pendulums
     have the same mass and are connected to the ceiling by a massless rod of length L_rod.
 
-    If x_0 = theta_0 and x_1 = theta_1 are the angles of the two pendulums, then the positions of
+    If q_0 = theta_0 and q_1 = theta_1 are the angles of the two pendulums, then the positions of
     the masses are:
 
-      x_0 = (L*sin(theta_0), -L*cos(theta_0))
-      x_1 = (d+L*sin(theta_1)), -L*cos(theta_1))
+      q_0 = (L*sin(theta_0), -L*cos(theta_0))
+      q_1 = (d+L*sin(theta_1)), -L*cos(theta_1))
 
     The potential energy is
 
       V_pot = mass*g_grav*L_rod*( (1-cos(theta_0)) + (1-cos(theta_1)) )
-            + 1/2*k_spring*(|x_0-x_1|-d_anchor)^2
+            + 1/2*k_spring*(|q_0-q_1|-d_anchor)^2
 
     where g_grav is the gravitational acceleration and the kinetic energy is
 
@@ -401,29 +401,29 @@ class CoupledPendulums(DynamicalSystem):
         """
         self.dH_preamble_code = """
         double phi;
-        double sin_x0;
-        double sin_x1;
-        double cos_x0;
-        double cos_x1;
+        double sin_q0;
+        double sin_q1;
+        double cos_q0;
+        double cos_q1;
         double C_tmp;
-        double sin_x0_x1;
+        double sin_q0_q1;
         double z0;
         double z1;
         """
-        self.dHx_update_code = f"""
-        sin_x0 = sin(x[0]);
-        sin_x1 = sin(x[1]);
-        cos_x0 = cos(x[0]);
-        cos_x1 = cos(x[1]);
-        sin_x0_x1 = sin(x[0]-x[1]);
-        z0 = {self.d_anchor} + {self.L_rod} * (sin_x1 - sin_x0);
-        z1 = {self.L_rod}* (cos_x1 - cos_x0);
+        self.dHq_update_code = f"""
+        sin_q0 = sin(q[0]);
+        sin_q1 = sin(q[1]);
+        cos_q0 = cos(q[0]);
+        cos_q1 = cos(q[1]);
+        sin_q0_q1 = sin(q[0]-q[1]);
+        z0 = {self.d_anchor} + {self.L_rod} * (sin_q1 - sin_q0);
+        z1 = {self.L_rod}* (cos_q1 - cos_q0);
         phi = sqrt( z0*z0 + z1*z1 );
         C_tmp = {self.k_spring} * {self.L_rod} * ({self.d_anchor}/phi - 1.0);        
-        dHx[0] = C_tmp * ( ({self.d_anchor}) * cos_x0 - {self.L_rod} * sin_x0_x1)
-               + {self.g_grav} / {self.L_rod} * sin_x0;
-        dHx[1] = C_tmp * ( -{self.d_anchor} * cos_x1 + ({self.L_rod}) * sin_x0_x1)
-               + {self.g_grav} / {self.L_rod} * sin_x1;
+        dHq[0] = C_tmp * ( ({self.d_anchor}) * cos_q0 - {self.L_rod} * sin_q0_q1)
+               + {self.g_grav} / {self.L_rod} * sin_q0;
+        dHq[1] = C_tmp * ( -{self.d_anchor} * cos_q1 + ({self.L_rod}) * sin_q0_q1)
+               + {self.g_grav} / {self.L_rod} * sin_q1;
         """
         self.dHp_update_code = f"""
         dHp[0] = p[0] / ({self.mass}*{self.L_rod}*{self.L_rod});
@@ -431,11 +431,11 @@ class CoupledPendulums(DynamicalSystem):
         """
 
     def _phi(self, theta_0, theta_1):
-        """Compute distance |x_0-x_1| = phi(theta_0, theta_1)
+        """Compute distance |q_0-q_1| = phi(theta_0, theta_1)
 
         given by
 
-        phi(theta_0,theta_1) := |x_0-x_1| = sqrt( (d_anchor + L_rod*(sin(theta_1)-sin(theta_0)))^2
+        phi(theta_0,theta_1) := |q_0-q_1| = sqrt( (d_anchor + L_rod*(sin(theta_1)-sin(theta_0)))^2
                                                 + L_rod^2*(cos(theta_1)-cos(theta_0))^2 )
 
         :arg theta_0: angle of first bob
@@ -446,10 +446,10 @@ class CoupledPendulums(DynamicalSystem):
             + self.L_rod**2 * (np.cos(theta_1) - np.cos(theta_0)) ** 2
         )
 
-    def compute_dHx(self, x, p, dHx):
-        """Compute dH/dx
+    def compute_dHq(self, q, p, dHq):
+        """Compute dH/dq
 
-        With theta_0 = x[0], theta_1, x[1],
+        With theta_0 = q[0], theta_1, q[1],
         the (negative) forces are gives:
 
         dH/dtheta_0 = dV_pot/dtheta_0
@@ -464,31 +464,31 @@ class CoupledPendulums(DynamicalSystem):
 
         C = k_spring / (L_rod * mass) * (d_anchor-phi(theta_0,theta_1)) / phi(theta_0,theta_1)
 
-        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg q: angles of bobs wrt vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
-        :arg dHx: resulting dH/dx
+        :arg dHq: resulting dH/dq
         """
-        phi = self._phi(x[0], x[1])
+        phi = self._phi(q[0], q[1])
         C_tmp = self.k_spring * self.L_rod * (self.d_anchor - phi) / phi
-        dHx[0] = C_tmp * (
-            self.d_anchor * np.cos(x[0]) - self.L_rod * np.sin(x[0] - x[1])
-        ) + self.g_grav / self.L_rod * np.sin(x[0])
-        dHx[1] = C_tmp * (
-            -self.d_anchor * np.cos(x[1]) + self.L_rod * np.sin(x[0] - x[1])
-        ) + self.g_grav / self.L_rod * np.sin(x[1])
+        dHq[0] = C_tmp * (
+            self.d_anchor * np.cos(q[0]) - self.L_rod * np.sin(q[0] - q[1])
+        ) + self.g_grav / self.L_rod * np.sin(q[0])
+        dHq[1] = C_tmp * (
+            -self.d_anchor * np.cos(q[1]) + self.L_rod * np.sin(q[0] - q[1])
+        ) + self.g_grav / self.L_rod * np.sin(q[1])
 
-    def compute_dHp(self, x, p, dHp):
+    def compute_dHp(self, q, p, dHp):
         """Compute dH/dp
 
         dH/dp_j = p_j/(mass*L_rod^2)
 
-        :arg x: angles of bobs wrt vertical (2-dimensional array)
+        :arg q: angles of bobs wrt vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
         :arg dHp: resulting dH/dp
         """
         dHp[:] = p[:] / (self.mass * self.L_rod**2)
 
-    def set_random_state(self, x, p):
+    def set_random_state(self, q, p):
         """Draw angles and angular momenta.
 
         We assume that angles theta_0 and theta_1 stay in the range [-pi/4,+pi/4], and
@@ -496,39 +496,39 @@ class CoupledPendulums(DynamicalSystem):
 
         E_{max} = k_spring*L_rod^2 + mass*g_grav*L_rod*(2-sqrt(2))
 
-        :arg x: Angles with vertical (2-dimensional array)
+        :arg q: Angles with vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
         """
 
         # Draw angle
-        x[0:2] = np.random.uniform(low=-0.25 * np.pi, high=+0.25 * np.pi, size=(2))
+        q[0:2] = np.random.uniform(low=-0.25 * np.pi, high=+0.25 * np.pi, size=(2))
         R_theta = (
             self.mass
             * self.L_rod**2
             * np.sqrt(
                 self.k_spring
                 / (self.mass * self.L_rod**2)
-                * (2.0 * self.L_rod**2 - (self._phi(x[0], x[1]) - self.d_anchor) ** 2)
+                * (2.0 * self.L_rod**2 - (self._phi(q[0], q[1]) - self.d_anchor) ** 2)
                 + 2.0
                 * self.g_grav
                 / self.L_rod
-                * (np.cos(x[0]) + np.cos(x[1]) - np.sqrt(2))
+                * (np.cos(q[0]) + np.cos(q[1]) - np.sqrt(2))
             )
         )
         p[:] = R_theta
         while p[0] ** 2 + p[1] ** 2 > R_theta**2:
             p[0:2] = np.random.uniform(low=-R_theta, high=R_theta, size=(2))
 
-    def energy(self, x, p):
+    def energy(self, q, p):
         """Compute total energy E = V_pot + T_kin
 
-        :arg x: Angles with vertical (2-dimensional array)
+        :arg q: Angles with vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
         """
         V_pot = 0.5 * self.k_spring * (
-            self._phi(x[0], x[1]) - self.d_anchor
+            self._phi(q[0], q[1]) - self.d_anchor
         ) ** 2 + self.mass * self.g_grav * self.L_rod * (
-            2 - np.cos(x[0]) - np.cos(x[1])
+            2 - np.cos(q[0]) - np.cos(q[1])
         )
         T_kin = 0.5 * (p[0] ** 2 + p[1] ** 2) / (self.mass * self.L_rod**2)
         return V_pot + T_kin
