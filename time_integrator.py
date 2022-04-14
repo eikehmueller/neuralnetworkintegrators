@@ -214,6 +214,222 @@ class VerletIntegrator(TimeIntegrator):
                 self.p[:] -= 0.5 * self.dt * self.dHq[:]
 
 
+class StrangSplitting(TimeIntegrator):
+    """Strang splitting integrator for non-separable Hamiltonians
+
+    Implements the symplectic Strang splitting method described in [1]
+
+    [1]: Molei Tao: "Explicit symplectic approximation of nonseparable Hamiltonians:
+         algorithm and long time performance" https://arxiv.org/abs/1609.02212
+
+    For this, the Hamiltonian H(x,p) is eqtended to
+
+      Hbar(q,p,x,y) = H_A(q,y) + H_B(z,p) + omega*H_C(q,p,x,y)
+
+    where H_A(q,y) = H(q,y), H_B(x,p) = H(x,p) and
+    H_C(q,p,x,y) = 1/2 * ( ||q-x||_2^2 + ||p-y||_2^2 )
+
+    The integrator corresponds to the following symmetric update:
+
+      phi^{dt} = phi_{H_A}^{dt/2} * phi_{H_B}^{dt/2}
+               * phi_{omega*H_C}^{dt}
+               * phi_{H_B}^{dt/2} * phi_{H_A}^{dt/2}
+
+    where phi_{H_X}^{dt} corresponds to time evolution with the Hamiltonian H_X.
+
+    For H_A, H_B and omega*H_C the action of these operators is written down in Eq. (1)
+    of [1].
+    """
+
+    def __init__(self, dynamical_system, dt, omega=1.0):
+        """Construct new instance
+
+        :arg dynamical_system: Dynamical system to be integrated
+        :arg dt: time step size
+        :arg omega: scaling factor of coupling term
+        """
+        super().__init__(dynamical_system, dt)
+        self.label = "StrangSplitting"
+        # Extended phase space variables
+        self.x = np.zeros(dynamical_system.dim)
+        self.y = np.zeros(dynamical_system.dim)
+        self.qpxy = np.zeros((4, dynamical_system.dim))
+        self.omega = omega
+        self.cos_2omega_dt = np.cos(2.0 * self.omega * self.dt)
+        self.sin_2omega_dt = np.sin(2.0 * self.omega * self.dt)
+        c_sourcecode = string.Template(
+            """
+        $DH_HEADER_CODE
+        #include <stdlib.h>
+        #include "math.h"
+        void timestepper(double* q, double* p, int nsteps) {
+            double dHq[$DIM];
+            double dHp[$DIM];
+            double* x = (double*) malloc($DIM*sizeof(double));
+            double* y = (double*) malloc($DIM*sizeof(double));
+            for (int j=0;j<$DIM;++j) {
+                x[j] = q[j];
+                y[j] = p[j];
+            }
+            double* tmp;
+            double _q[$DIM];
+            double _p[$DIM];
+            double _x[$DIM];
+            double _y[$DIM];
+            double Cos_tmp = cos(2*$OMEGA*$DT);
+            double Sin_tmp = sin(2*$OMEGA*$DT);
+            $DH_PREAMBLE_CODE
+            for (int k=0;k<nsteps;++k) {
+                /* ******** H_A update ******** */
+                // Swap p <-> y before and after evaluating dH
+                tmp = y; y = p; p = tmp;
+                $DHQ_UPDATE_CODE
+                $DHP_UPDATE_CODE
+                tmp = y; y = p; p = tmp;
+                for (int j=0; j<$DIM;++j) {
+                    x[j] += 0.5*$DT*dHp[j];
+                    p[j] -= 0.5*$DT*dHq[j];
+                }
+                /* ******** H_B update ******** */
+                // Swap q <-> x before and after evaluating dH
+                tmp = x; x = q; q = tmp;
+                $DHQ_UPDATE_CODE
+                $DHP_UPDATE_CODE
+                tmp = x; x = q; q = tmp;
+                for (int j=0; j<$DIM;++j) {
+                    q[j] += 0.5*$DT*dHp[j];
+                    y[j] -= 0.5*$DT*dHq[j];
+                }
+                /* ******** H_C update ******** */
+                for (int j=0;j<$DIM;++j) {
+                    _q[j] = 0.5*( (1+Cos_tmp)*q[j] +     Sin_tmp*p[j]
+                                  + (1-Cos_tmp)*x[j] -     Sin_tmp * y[j] );
+                    _p[j] = 0.5*(    -Sin_tmp*q[j] + (1+Cos_tmp)*p[j]
+                                  +     Sin_tmp*x[j] + (1-Cos_tmp) * y[j] );
+                    _x[j] = 0.5*( (1-Cos_tmp)*q[j] -     Sin_tmp*p[j]
+                                  + (1+Cos_tmp)*x[j] +     Sin_tmp * y[j] );
+                    _y[j] = 0.5*(    +Sin_tmp*q[j] + (1-Cos_tmp)*p[j]
+                                  -     Sin_tmp*x[j] + (1+Cos_tmp) * y[j] );
+                }
+                for (int j=0;j<$DIM;++j) {
+                    q[j] = _q[j];
+                    p[j] = _p[j];
+                    x[j] = _x[j];
+                    y[j] = _y[j];
+                }
+                /* ******** H_B update ******** */
+                // Swap q <-> x before and after evaluating dH
+                tmp = x; x = q; q = tmp;
+                $DHQ_UPDATE_CODE
+                $DHP_UPDATE_CODE
+                tmp = x; x = q; q = tmp;
+                for (int j=0; j<$DIM;++j) {
+                    q[j] += 0.5*$DT*dHp[j];
+                    y[j] -= 0.5*$DT*dHq[j];
+                }
+                /* ******** H_A update ******** */
+                // Swap p <-> y before and after evaluating dH
+                tmp = y; y = p; p = tmp;
+                $DHQ_UPDATE_CODE
+                $DHP_UPDATE_CODE
+                tmp = y; y = p; p = tmp;
+                for (int j=0; j<$DIM;++j) {
+                    x[j] += 0.5*$DT*dHp[j];
+                    p[j] -= 0.5*$DT*dHq[j];
+                }
+            }
+            free(x);
+            free(y);
+        }
+        """
+        ).safe_substitute(OMEGA=self.omega)
+        self.timestepper_library = self._generate_timestepper_library(c_sourcecode)
+
+    def set_state(self, q, p):
+        """Set the current state of the integrator to a specified
+        position and momentum.
+
+        We need to overwrite the base class method to also set x and y
+
+        :arg q: New position vector
+        :arg p: New momentum vector
+        """
+        self.q[:] = q[:]
+        self.p[:] = p[:]
+        self.x[:] = q[:]
+        self.y[:] = p[:]
+
+    def _step_HA(self):
+        """Step with Hamiltonian H_A
+
+        Carries out a step of size dt/2 with the Hamiltonian H_A
+        """
+        self.dynamical_system.compute_dHq(self.q, self.y, self.dHq)
+        self.dynamical_system.compute_dHp(self.q, self.y, self.dHp)
+        self.p[:] -= 0.5 * self.dt * self.dHq[:]
+        self.x[:] += 0.5 * self.dt * self.dHp[:]
+
+    def _step_HB(self):
+        """Step with Hamiltonian H_B
+
+        Carries out a step of size dt/2 with the Hamiltonian H_B
+        """
+        self.dynamical_system.compute_dHq(self.x, self.p, self.dHq)
+        self.dynamical_system.compute_dHp(self.x, self.p, self.dHp)
+        self.q[:] += 0.5 * self.dt * self.dHp[:]
+        self.y[:] -= 0.5 * self.dt * self.dHq[:]
+
+    def _step_HC(self):
+        """Step with coupling Hamiltonian H_C
+
+        Carries out a step of size dt with the Hamiltonian H_B
+        """
+        self.qpxy[0, :] = 0.5 * (
+            (1 + self.cos_2omega_dt) * self.q[:]
+            + self.sin_2omega_dt * self.p[:]
+            + (1 - self.cos_2omega_dt) * self.x[:]
+            - self.sin_2omega_dt * self.y[:]
+        )
+        self.qpxy[1, :] = 0.5 * (
+            -self.sin_2omega_dt * self.q[:]
+            + (1 + self.cos_2omega_dt) * self.p[:]
+            + self.sin_2omega_dt * self.x[:]
+            + (1 - self.cos_2omega_dt) * self.y[:]
+        )
+        self.qpxy[2, :] = 0.5 * (
+            (1 - self.cos_2omega_dt) * self.q[:]
+            - self.sin_2omega_dt * self.p[:]
+            + (1 + self.cos_2omega_dt) * self.x[:]
+            + self.sin_2omega_dt * self.y[:]
+        )
+        self.qpxy[3, :] = 0.5 * (
+            self.sin_2omega_dt * self.q[:]
+            + (1 - self.cos_2omega_dt) * self.p[:]
+            - self.sin_2omega_dt * self.x[:]
+            + (1 + self.cos_2omega_dt) * self.y[:]
+        )
+        self.q[:] = self.qpxy[0, :]
+        self.p[:] = self.qpxy[1, :]
+        self.x[:] = self.qpxy[2, :]
+        self.y[:] = self.qpxy[3, :]
+
+    def integrate(self, n_steps):
+        """Carry out n_step timesteps, starting from the current set_state
+        and updating this
+
+        :arg steps: Number of integration steps
+        """
+        if self.fast_code:
+            self.timestepper_library(self.q, self.p, n_steps)
+        else:
+            for _ in range(n_steps):
+                self._step_HA()
+                self._step_HB()
+                self._step_HC()
+                self._step_HB()
+                self._step_HA()
+
+
 class RK4Integrator(TimeIntegrator):
     def __init__(self, dynamical_system, dt):
         """RK4 integrator given by
