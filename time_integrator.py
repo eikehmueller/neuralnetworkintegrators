@@ -79,7 +79,7 @@ class TimeIntegrator(ABC):
             sha = hashlib.md5()
             sha.update(c_substituted_sourcecode.encode())
             directory = "./generated_code/"
-            if not os.stat(directory):
+            if not os.path.exists(directory):
                 os.mkdir(directory)
             filestem = "./timestepper_" + sha.hexdigest()
             so_file = directory + "/" + filestem + ".so"
