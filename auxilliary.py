@@ -25,7 +25,7 @@ class ndarrayDecoder(json.JSONDecoder):
     def object_hook(self, obj):
         if "_type" not in obj:
             return obj
-        type = obj["_type"]
-        if type == "ndarray":
+        datatype = obj["_type"]
+        if datatype == "ndarray":
             return np.reshape(np.array(obj["data"], dtype=obj["dtype"]), obj["shape"])
         return obj
