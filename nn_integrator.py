@@ -24,7 +24,7 @@ class NNIntegrator(object):
         self.dt = dt
         self.dim = 2 * self.dynamical_system.dim
         self.nsteps = nsteps
-        self.xp = np.zeros((1, self.nsteps, self.dim))
+        self.qp = np.zeros((1, self.nsteps, self.dim))
         self.learning_rate = learning_rate
 
     @classmethod
@@ -40,24 +40,24 @@ class NNIntegrator(object):
         nn_integrator.model = model
         return nn_integrator
 
-    def set_state(self, x, p):
+    def set_state(self, q, p):
         """Set the current state of the integrator
 
-        :arg x: Array of size nsteps x dim with initial positions
-        :arg v: Array of size nsteps x dim with initial velocities
+        :arg q: Array of size nsteps x dim with initial positions
+        :arg p: Array of size nsteps x dim with initial momenta
         """
-        self.xp[0, :, : self.dim // 2] = x[:, :]
-        self.xp[0, :, self.dim // 2 :] = p[:, :]
+        self.qp[0, :, : self.dim // 2] = q[:, :]
+        self.qp[0, :, self.dim // 2 :] = p[:, :]
 
     @property
-    def x(self):
+    def q(self):
         """Return the current position vector (as a d-dimensional array)"""
-        return self.xp[0, -1, : self.dim // 2]
+        return self.qp[0, -1, : self.dim // 2]
 
     @property
     def p(self):
         """Return the current velocity vector (as a d-dimensional array)"""
-        return self.xp[0, -1, self.dim // 2 :]
+        return self.qp[0, -1, self.dim // 2 :]
 
     def integrate(self, n_steps):
         """Carry out a given number of integration steps
@@ -65,13 +65,13 @@ class NNIntegrator(object):
         :arg n_steps: number of integration steps
         """
         for _ in range(n_steps):
-            x_pred = np.asarray(self.model.predict(self.xp)).flatten()
-            self.xp = np.roll(self.xp, -1, axis=1)
-            self.xp[0, -1, :] = x_pred[:]
+            q_pred = np.asarray(self.model.predict(self.qp)).flatten()
+            self.qp = np.roll(self.qp, -1, axis=1)
+            self.qp[0, -1, :] = q_pred[:]
 
     def energy(self):
         """Compute energy of dynamical system at current state"""
-        return self.dynamical_system.energy(self.x, self.p)
+        return self.dynamical_system.energy(self.q, self.p)
 
 
 class MultistepNNIntegrator(NNIntegrator):
@@ -107,7 +107,7 @@ class MultistepNNIntegrator(NNIntegrator):
             metrics=[],
             optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
         )
-        self.xp = np.zeros((1, self.nsteps, self.dim))
+        self.qp = np.zeros((1, self.nsteps, self.dim))
 
 
 class HamiltonianVerletNNIntegrator(NNIntegrator):
@@ -196,7 +196,7 @@ class HamiltonianVerletNNIntegrator(NNIntegrator):
 
         :arg filename: name of file to read
         """
-        # >>> import keras <<<
+        import keras
 
         layers = []
         layer_weights = {}
