@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy import linalg as la
 
 
 class DynamicalSystem(ABC):
@@ -159,6 +160,148 @@ class HarmonicOscillator(DynamicalSystem):
         sin_omegat = np.sin(omega * t)
         q = np.array(q0[0] * cos_omegat + p0[0] / (omega * self.mass) * sin_omegat)
         p = np.array(-q0[0] * self.mass * omega * sin_omegat + p0[0] * cos_omegat)
+        return q, p
+
+
+class CoupledHarmonicOscillators(DynamicalSystem):
+    """System of two coupled harmonic oscillators
+
+    The system is described by the Hamiltonian
+
+      H(q,p) = p_0^2/(2*m_0) + p_1^2/(2*m_1)
+             + 1/2*k_{spring,0}*q_0^2 + 1/2*k_{spring,1}*q_1^2
+             + k_{spring,c}*q_0*q_1
+
+    which results in the following equations of motion:
+
+      dq_j/dt = p_j/m_j for j = 0,1
+      dp_0/dt = -( k_{sprint,0}*q_0 + k_{sprint,c}*q_1 )
+      dp_1/dt = -( k_{sprint,1}*q_1 + k_{sprint,c}*q_0 )
+    """
+
+    def __init__(self, mass, k_spring, k_spring_c):
+        """Construct new instance of coupled harmonic oscillator class
+
+        :arg mass: Particle masses m_0, m_1 (array with two elements)
+        :arg k_spring: Spring constants k_{spring,0}, k_{spring,1} (array with two elements)
+        :arg k_spring_c: Coupling constant k_{spring,c}
+        """
+        super().__init__(2, mass)
+        self.separable = True
+        self.k_spring = list(k_spring)
+        self.k_spring_c = k_spring_c
+        # C-code snipped for computing the dH update
+        self.dHq_update_code = f"""
+          dHq[0] = ({self.k_spring[0]})*q[0] + ({self.k_spring_c})*q[1];
+          dHq[1] = ({self.k_spring[1]})*q[1] + ({self.k_spring_c})*q[0];
+        """
+        self.dHp_update_code = f"""
+        dHp[0] = 1.0/({self.mass[0]})*p[0];
+        dHp[1] = 1.0/({self.mass[1]})*p[1];
+        """
+        # Construct 2x2 matrices required for exact solution
+        M_mass = np.asarray([[self.mass[0], 0], [0, self.mass[1]]])
+        K_spring = np.asarray(
+            [[self.k_spring[0], self.k_spring_c], [self.k_spring_c, self.k_spring[1]]]
+        )
+        # Compute eigenvectors and angular frequencies
+        eigenvals, eigenvecs = la.eig(K_spring, b=M_mass)
+        self.omega0, self.omega1 = np.sqrt(np.asarray(eigenvals))
+        self.u0 = np.asarray(eigenvecs[:, 0])
+        self.u1 = np.asarray(eigenvecs[:, 1])
+
+    def compute_dHq(self, q, p, dHq):
+        """Compute dH/dq
+
+        Returns dH/dq = k_{spring}*q
+
+        :arg q: Particle position q (1-dimensional array)
+        :arg p: Particle momentum p (1-dimensional array)
+        :arg dHq: Resulting dH/dq
+        """
+        dHq[0] = self.k_spring[0] * q[0] + self.k_spring_c * q[1]
+        dHq[1] = self.k_spring[1] * q[1] + self.k_spring_c * q[0]
+
+    def compute_dHp(self, q, p, dHp):
+        """Compute dH/dp
+
+        Returns dH/dp = p/mass
+
+        :arg q: Particle position q (1-dimensional array)
+        :arg p: Particle momentum q (1-dimensional array)
+        :arg dHp: Resulting dH/dp
+        """
+        dHp[0] = p[0] / self.mass[0]
+        dHp[1] = p[1] / self.mass[1]
+
+    def set_random_state(self, q, p):
+        """Draw position and momentum from a normal distribution
+        :arg q: Position (1-dimensional array)
+        :arg p: Momentum (1-dimensional array)
+        """
+        q[:] = np.random.normal(loc=0, scale=1, dim=2)
+        p[:] = np.random.normal(loc=0, scale=1, dim=2)
+
+    def energy(self, q, p):
+        """Compute total energy E = p^2/(2*m) + 1/2*k*q^2
+
+        :arg q: Position (1-dimensional array)
+        :arg p: Momentum (1-dimensional array)
+        """
+        return (
+            0.5 * (p[0] ** 2 / self.mass[0] + p[1] ** 2 / self.mass[0])
+            + 0.5 * (self.k_spring[0] * q[0] ** 2 + self.k_spring[1] * q[1] ** 2)
+            + self.k_spring_c * q[0] * q[1]
+        )
+
+    def forward_map(self, q0, p0, t):
+        """Exact forward map
+
+        Compute position q(t) and momentum p(t), given initial position q(0) and momentum p(0).
+        The exact solution is obtained by solving the generalised eigenvalue problem
+
+          K u_j = lambda_j M u_j
+
+        with the two 2x2 matrices
+
+          K = [ [k_{spring,0} , k_{spring,c}] , [k_{spring,c} , k_{spring,0}] ]
+          M = [ [m_0 , 0 ] , [0, m_1] ]
+
+        to obtain the eigenvalue/eigenvector pairs (lambda_j, u_j).
+
+        Given initial conditions x(0) and p(0), the exact solution is
+        then:
+
+          x(t) =  ( a_{0,c} cos(omega_0 t) + a_{0,s} sin(omega_0 t) ) u_0
+                 + ( a_{1,c} cos(omega_1 t) + a_{1,s} sin(omega_1 t) ) u_1
+              := ( <u_0,x(0)> cos(omega_0 t) + <u_0,p(0)>/(omega_0*m_0) sin(omega_0 t) ) u_0
+                 + ( <u_1,x(0)> cos(omega_1 t) + <u_1,p(0)>/(omega_1*m_1) sin(omega_1 t) ) u_1
+
+        :arg q0: initial position q(0) (2d vector)
+        :arg p0: initial momentum p(0) (2d vector)
+        :arg t: final time
+        """
+        cos_omega0t = np.cos(self.omega0 * t)
+        cos_omega1t = np.sin(self.omega1 * t)
+        sin_omega0t = np.sin(self.omega0 * t)
+        sin_omega1t = np.sin(self.omega1 * t)
+        a_0c = np.dot(self.u0, q0)
+        a_1c = np.dot(self.u1, q0)
+        a_0s = np.dot(self.u0, p0) / (self.mass[0] * self.omega0)
+        a_1s = np.dot(self.u1, p0) / (self.mass[1] * self.omega1)
+        q = (a_0c * cos_omega0t + a_0s * sin_omega0t) * self.u0[:] + (
+            a_1c * cos_omega1t + a_1s * sin_omega1t
+        ) * self.u1[:]
+        p = (
+            self.mass[0]
+            * self.omega0
+            * (-a_0c * sin_omega0t + a_0s * cos_omega0t)
+            * self.u0[:]
+            + self.mass[1]
+            * self.omega1
+            * (-a_1c * sin_omega1t + a_1s * cos_omega1t)
+            * self.u1[:]
+        )
         return q, p
 
 
