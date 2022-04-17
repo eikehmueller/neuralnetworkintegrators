@@ -254,6 +254,26 @@ class CoupledHarmonicOscillators(DynamicalSystem):
             + self.k_spring_c * q[0] * q[1]
         )
 
+    def _u_coord(self, x):
+        """Work out the coefficients a,b such that x = a*u_0 + b*u_1
+
+        u_j are the eigenvectors of the matrix M^{-1}.K. Note that u_0 and u_1 are *not*
+        orthogonal.
+
+        Let x_0 := <u_0,x> and x_1 := <u_1,x> with gamma = <u_0,u_1>. Then we have that
+
+          a = (x_0 - gamma*x_1)/(1-gamma^2)
+          b = (x_1 - gamma*x_0)/(1-gamma^2)
+
+        :arg x: vector to project onto u_0,u_1 basis
+        """
+        gamma = np.dot(self.u0, self.u1)
+        x0 = np.dot(self.u0, x)
+        x1 = np.dot(self.u1, x)
+        a = (x0 - gamma * x1) / (1 - gamma**2)
+        b = (x1 - gamma * x0) / (1 - gamma**2)
+        return a, b
+
     def forward_map(self, q0, p0, t):
         """Exact forward map
 
@@ -285,18 +305,15 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         cos_omega1t = np.cos(self.omega1 * t)
         sin_omega0t = np.sin(self.omega0 * t)
         sin_omega1t = np.sin(self.omega1 * t)
-        a_0c = np.dot(self.u0, q0)
-        a_1c = np.dot(self.u1, q0)
+        a_0c, a_1c = self._u_coord(q0)
         v0 = np.array([p0[0] / self.mass[0], p0[1] / self.mass[1]])
-        a_0s = np.dot(self.u0, v0) / self.omega0
-        a_1s = np.dot(self.u1, v0) / self.omega1
-        q = (a_0c * cos_omega0t + a_0s * sin_omega0t) * self.u0[:] + (
-            a_1c * cos_omega1t + a_1s * sin_omega1t
+        a_0s, a_1s = self._u_coord(v0)
+        q = (a_0c * cos_omega0t + a_0s / self.omega0 * sin_omega0t) * self.u0[:] + (
+            a_1c * cos_omega1t + a_1s / self.omega1 * sin_omega1t
         ) * self.u1[:]
-        v = (
-            self.omega0 * (-a_0c * sin_omega0t + a_0s * cos_omega0t) * self.u0[:]
-            + self.omega1 * (-a_1c * sin_omega1t + a_1s * cos_omega1t) * self.u1[:]
-        )
+        v = (-a_0c * self.omega0 * sin_omega0t + a_0s * cos_omega0t) * self.u0[:] + (
+            -a_1c * self.omega1 * sin_omega1t + a_1s * cos_omega1t
+        ) * self.u1[:]
         p = np.array([self.mass[0] * v[0], self.mass[1] * v[1]])
         return q, p
 
