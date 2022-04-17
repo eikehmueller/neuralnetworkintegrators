@@ -346,7 +346,7 @@ class DoublePendulum(DynamicalSystem):
         self.g_grav = g_grav
         self.L0 = L0
         self.L1 = L1
-        # C-code snipped for computing the acceleration update
+        # C-code snippet for computing the acceleration update
         self.dH_header_code = """
         #include "math.h"
         """
@@ -356,6 +356,9 @@ class DoublePendulum(DynamicalSystem):
         double sin_2_q0_q1;
         double sin_q0;
         double sin_q1;
+        double h0;
+        double h1;
+        double kappa;
         """
         self.dHq_update_code = f"""
         cos_q0_q1 = cos(q[0]-q[1]);
@@ -363,12 +366,12 @@ class DoublePendulum(DynamicalSystem):
         sin_2_q0_q1 = sin(2.*(q[0]-q[1]));
         sin_q0 = sin(q[0]);
         sin_q1 = sin(q[1]);
-        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_q0_q1*sin_q0_q1);
+        kappa = 1 / ({self.L0} * {self.L1} * (({self.mass[0]}) + ({self.mass[1]})*sin_q0_q1*sin_q0_q1));
         h0 = p[0]*p[1]*sin_q0_q1 * kappa;
         h1 = 0.5 * ({self.mass[1]}*{self.L1}*{self.L1}*p[0]*p[0] 
              + ({self.mass[0]}+{self.mass[1]}) * {self.L0}*{self.L0}*p[1]*p[1]
              - 2*{self.mass[1]}*{self.L0}*{self.L1}*p[0]*p[1]*cos_q0_q1) * kappa * kappa;
-        dHq[0] = ({self.mass[0]}+{self.mass[0]})*{self.g_grav}*{self.L0}*sin_q0
+        dHq[0] = ({self.mass[0]}+{self.mass[1]})*{self.g_grav}*{self.L0}*sin_q0
                   + h0 - h1 * sin_2_q0_q1;
         dHq[1] = {self.mass[1]}*{self.g_grav}*{self.L1}*sin_q1 
                   - h0 + h1 * sin_2_q0_q1;
@@ -379,7 +382,7 @@ class DoublePendulum(DynamicalSystem):
         sin_2_q0_q1 = sin(2.*(q[0]-q[1]));
         sin_q0 = sin(q[0]);
         sin_q1 = sin(q[1]);
-        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + {self.mass[1]})*sin_q0_q1*sin_q0_q1);
+        kappa = 1 / ({self.L0} * {self.L1} * ({self.mass[0]} + ({self.mass[1]})*sin_q0_q1*sin_q0_q1));
         dHp[0] = ( {self.L1}*p[0] - {self.L0}*p[1]*cos_q0_q1 ) * kappa / {self.L0};
         dHp[1] = ( -{self.L1}*p[0]*cos_q0_q1 
                     + (1.+{self.mass[0]}/{self.mass[1]})*{self.L0}*p[1] ) * kappa / {self.L1};
@@ -391,7 +394,7 @@ class DoublePendulum(DynamicalSystem):
         :arg q: Position angles (2-dimensional array)
         """
         return 1 / (
-            self.L0 * self.L1 * (self.mass[0] + self.mass[1]) * np.sin(q[0] - q[1]) ** 2
+            self.L0 * self.L1 * (self.mass[0] + self.mass[1] * np.sin(q[0] - q[1]) ** 2)
         )
 
     def compute_dHq(self, q, p, dHq):
@@ -405,7 +408,7 @@ class DoublePendulum(DynamicalSystem):
         h0 = p[0] * p[1] * np.sin(q[0] - q[1]) * kappa
         h1 = (
             (
-                self.mass[1] * self.L1**2 * p[0] * p[0]
+                self.mass[1] * self.L1**2 * p[0] ** 2
                 + (self.mass[0] + self.mass[1]) * self.L0**2 * p[1] ** 2
                 - 2
                 * self.mass[1]
@@ -420,7 +423,7 @@ class DoublePendulum(DynamicalSystem):
         )
 
         dHq[0] = (
-            (self.mass[0] + self.mass[0]) * self.g_grav * self.L0 * np.sin(q[0])
+            (self.mass[0] + self.mass[1]) * self.g_grav * self.L0 * np.sin(q[0])
             + h0
             - h1 * np.sin(2 * (q[0] - q[1]))
         )
