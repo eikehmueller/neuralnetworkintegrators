@@ -249,7 +249,7 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         :arg p: Momentum (1-dimensional array)
         """
         return (
-            0.5 * (p[0] ** 2 / self.mass[0] + p[1] ** 2 / self.mass[0])
+            0.5 * (p[0] ** 2 / self.mass[0] + p[1] ** 2 / self.mass[1])
             + 0.5 * (self.k_spring[0] * q[0] ** 2 + self.k_spring[1] * q[1] ** 2)
             + self.k_spring_c * q[0] * q[1]
         )
@@ -269,13 +269,13 @@ class CoupledHarmonicOscillators(DynamicalSystem):
 
         to obtain the eigenvalue/eigenvector pairs (lambda_j, u_j).
 
-        Given initial conditions x(0) and p(0), the exact solution is
+        Given initial conditions x(0) and p(0) = M*v(0), the exact solution is
         then:
 
           x(t) =  ( a_{0,c} cos(omega_0 t) + a_{0,s} sin(omega_0 t) ) u_0
                  + ( a_{1,c} cos(omega_1 t) + a_{1,s} sin(omega_1 t) ) u_1
-              := ( <u_0,x(0)> cos(omega_0 t) + <u_0,p(0)>/(omega_0*m_0) sin(omega_0 t) ) u_0
-                 + ( <u_1,x(0)> cos(omega_1 t) + <u_1,p(0)>/(omega_1*m_1) sin(omega_1 t) ) u_1
+              := ( <u_0,x(0)> cos(omega_0 t) + <u_0,v(0)>/(omega_0) sin(omega_0 t) ) u_0
+                 + ( <u_1,x(0)> cos(omega_1 t) + <u_1,v(0)>/(omega_1) sin(omega_1 t) ) u_1
 
         :arg q0: initial position q(0) (2d vector)
         :arg p0: initial momentum p(0) (2d vector)
