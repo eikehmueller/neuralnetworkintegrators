@@ -239,8 +239,8 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         :arg q: Position (1-dimensional array)
         :arg p: Momentum (1-dimensional array)
         """
-        q[:] = np.random.normal(loc=0, scale=1, dim=2)
-        p[:] = np.random.normal(loc=0, scale=1, dim=2)
+        q[:] = np.random.normal(loc=0, scale=1, size=2)
+        p[:] = np.random.normal(loc=0, scale=1, size=2)
 
     def energy(self, q, p):
         """Compute total energy E = p^2/(2*m) + 1/2*k*q^2
