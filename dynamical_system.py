@@ -206,7 +206,7 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         )
         # Compute eigenvectors and angular frequencies
         eigenvals, eigenvecs = la.eig(K_spring, b=M_mass)
-        self.omega0, self.omega1 = np.sqrt(np.asarray(eigenvals))
+        self.omega0, self.omega1 = np.real(np.sqrt(np.asarray(eigenvals)))
         self.u0 = np.asarray(eigenvecs[:, 0])
         self.u1 = np.asarray(eigenvecs[:, 1])
 
@@ -282,26 +282,22 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         :arg t: final time
         """
         cos_omega0t = np.cos(self.omega0 * t)
-        cos_omega1t = np.sin(self.omega1 * t)
+        cos_omega1t = np.cos(self.omega1 * t)
         sin_omega0t = np.sin(self.omega0 * t)
         sin_omega1t = np.sin(self.omega1 * t)
         a_0c = np.dot(self.u0, q0)
         a_1c = np.dot(self.u1, q0)
-        a_0s = np.dot(self.u0, p0) / (self.mass[0] * self.omega0)
-        a_1s = np.dot(self.u1, p0) / (self.mass[1] * self.omega1)
+        v0 = np.array([p0[0] / self.mass[0], p0[1] / self.mass[1]])
+        a_0s = np.dot(self.u0, v0) / self.omega0
+        a_1s = np.dot(self.u1, v0) / self.omega1
         q = (a_0c * cos_omega0t + a_0s * sin_omega0t) * self.u0[:] + (
             a_1c * cos_omega1t + a_1s * sin_omega1t
         ) * self.u1[:]
-        p = (
-            self.mass[0]
-            * self.omega0
-            * (-a_0c * sin_omega0t + a_0s * cos_omega0t)
-            * self.u0[:]
-            + self.mass[1]
-            * self.omega1
-            * (-a_1c * sin_omega1t + a_1s * cos_omega1t)
-            * self.u1[:]
+        v = (
+            self.omega0 * (-a_0c * sin_omega0t + a_0s * cos_omega0t) * self.u0[:]
+            + self.omega1 * (-a_1c * sin_omega1t + a_1s * cos_omega1t) * self.u1[:]
         )
+        p = np.array([self.mass[0] * v[0], self.mass[1] * v[1]])
         return q, p
 
 
