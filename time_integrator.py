@@ -214,7 +214,7 @@ class VerletIntegrator(TimeIntegrator):
                 self.p[:] -= 0.5 * self.dt * self.dHq[:]
 
 
-class StrangSplitting(TimeIntegrator):
+class StrangSplittingIntegrator(TimeIntegrator):
     """Strang splitting integrator for non-separable Hamiltonians
 
     Implements the symplectic Strang splitting method described in [1]
