@@ -26,6 +26,7 @@ class DynamicalSystem(ABC):
         self.dH_preamble_code = None
         self.dH_update_code = None
         self.separable = False
+        self.backend = np  # Backend for numpy
 
     @abstractmethod
     def compute_dHq(self, q, p, dHq):
@@ -131,13 +132,27 @@ class HarmonicOscillator(DynamicalSystem):
         q[0] = np.random.normal(0, 1)
         p[0] = np.random.normal(0, 1)
 
+    def T_kin(self, p):
+        """Kinetic energy
+
+        :arg p: momentum
+        """
+        return 0.5 * p[0] ** 2 / self.mass
+
+    def V_pot(self, q):
+        """Potential energy
+
+        :arg q: position
+        """
+        return 1 / 2 * self.k_spring * q[0] ** 2
+
     def energy(self, q, p):
         """Compute total energy E = p^2/(2*m) + 1/2*k*q^2
 
         :arg q: Position (1-dimensional array)
         :arg p: Momentum (1-dimensional array)
         """
-        return 0.5 * p[0] ** 2 / self.mass + 0.5 * self.k_spring * q[0] ** 2
+        return self.T_kin(p) + self.V_pot(q)
 
     def forward_map(self, q0, p0, t):
         """Exact forward map
@@ -242,17 +257,30 @@ class CoupledHarmonicOscillators(DynamicalSystem):
         q[:] = np.random.normal(loc=0, scale=1, size=2)
         p[:] = np.random.normal(loc=0, scale=1, size=2)
 
-    def energy(self, q, p):
-        """Compute total energy E = p^2/(2*m) + 1/2*k*q^2
+    def T_kin(self, p):
+        """Kinetic energy
 
-        :arg q: Position (1-dimensional array)
-        :arg p: Momentum (1-dimensional array)
+        :arg p: momentum
+        """
+        return 1 / 2 * (p[0] ** 2 / self.mass[0] + p[1] ** 2 / self.mass[1])
+
+    def V_pot(self, q):
+        """Potential energy
+
+        :arg q: position
         """
         return (
-            0.5 * (p[0] ** 2 / self.mass[0] + p[1] ** 2 / self.mass[1])
-            + 0.5 * (self.k_spring[0] * q[0] ** 2 + self.k_spring[1] * q[1] ** 2)
-            + self.k_spring_c * q[0] * q[1]
-        )
+            (self.k_spring[0] * q[0] ** 2 + self.k_spring[1] * q[1] ** 2)
+            + 2 * self.k_spring_c * q[0] * q[1]
+        ) / 2
+
+    def energy(self, q, p):
+        """Compute total energy
+
+        :arg q: Position (2-dimensional array)
+        :arg p: Momentum (2-dimensional array)
+        """
+        return self.T_kin(p) + self.V_pot(q)
 
     def _u_coord(self, x):
         """Work out the coefficients a,b such that x = a*u_0 + b*u_1
@@ -407,7 +435,9 @@ class DoublePendulum(DynamicalSystem):
         :arg q: Position angles (2-dimensional array)
         """
         return 1 / (
-            self.L0 * self.L1 * (self.mass[0] + self.mass[1] * np.sin(q[0] - q[1]) ** 2)
+            self.L0
+            * self.L1
+            * (self.mass[0] + self.mass[1] * self.backend.sin(q[0] - q[1]) ** 2)
         )
 
     def compute_dHq(self, q, p, dHq):
@@ -493,14 +523,14 @@ class DoublePendulum(DynamicalSystem):
 
         # Potential Energy
         V_pot = self.g_grav * (
-            (self.mass[0] + self.mass[1]) * self.L0 * (1 - np.cos(q[0]))
-            + self.mass[1] * self.L1 * (1 - np.cos(q[1]))
+            (self.mass[0] + self.mass[1]) * self.L0 * (1 - self.backend.cos(q[0]))
+            + self.mass[1] * self.L1 * (1 - self.backend.cos(q[1]))
         )
         T_kin = 0.5 * (
             (
                 self.L1**2 * p[0] ** 2
                 + (1 + self.mass[0] / self.mass[1]) * self.L0**2 * p[1] ** 2
-                - 2 * self.L0 * self.L1 * p[0] * p[1] * np.cos(q[0] - q[1])
+                - 2 * self.L0 * self.L1 * p[0] * p[1] * self.backend.cos(q[0] - q[1])
             )
             * self._kappa(q)
             / (self.L0 * self.L1)
@@ -600,9 +630,14 @@ class CoupledPendulums(DynamicalSystem):
         :arg theta_0: angle of first bob
         :arg theta_1: angle of second bob
         """
-        return np.sqrt(
-            (self.d_anchor + self.L_rod * (np.sin(theta_1) - np.sin(theta_0))) ** 2
-            + self.L_rod**2 * (np.cos(theta_1) - np.cos(theta_0)) ** 2
+        return self.backend.sqrt(
+            (
+                self.d_anchor
+                + self.L_rod * (self.backend.sin(theta_1) - self.backend.sin(theta_0))
+            )
+            ** 2
+            + self.L_rod**2
+            * (self.backend.cos(theta_1) - self.backend.cos(theta_0)) ** 2
         )
 
     def compute_dHq(self, q, p, dHq):
@@ -678,16 +713,28 @@ class CoupledPendulums(DynamicalSystem):
         while p[0] ** 2 + p[1] ** 2 > R_theta**2:
             p[0:2] = np.random.uniform(low=-R_theta, high=R_theta, size=(2))
 
+    def T_kin(self, p):
+        """Kinetic energy
+
+        :arg p: momentum
+        """
+        return (p[0] ** 2 + p[1] ** 2) / (2 * self.mass * self.L_rod**2)
+
+    def V_pot(self, q):
+        """Potential energy
+
+        :arg q: position
+        """
+        return 1 / 2 * self.k_spring * (
+            self._phi(q[0], q[1]) - self.d_anchor
+        ) ** 2 + self.mass * self.g_grav * self.L_rod * (
+            2 - self.backend.cos(q[0]) - self.backend.cos(q[1])
+        )
+
     def energy(self, q, p):
         """Compute total energy E = V_pot + T_kin
 
         :arg q: Angles with vertical (2-dimensional array)
         :arg p: Angular momenta (2-dimensional array)
         """
-        V_pot = 0.5 * self.k_spring * (
-            self._phi(q[0], q[1]) - self.d_anchor
-        ) ** 2 + self.mass * self.g_grav * self.L_rod * (
-            2 - np.cos(q[0]) - np.cos(q[1])
-        )
-        T_kin = 0.5 * (p[0] ** 2 + p[1] ** 2) / (self.mass * self.L_rod**2)
-        return V_pot + T_kin
+        return self.V_pot(q) + self.T_kin(p)
