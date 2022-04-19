@@ -4,8 +4,8 @@ import numpy as np
 import tensorflow as tf
 from dynamical_system import *  # pylint: disable=import-error,wildcard-import
 from time_integrator import *  # pylint: disable=import-error,wildcard-import
-from models import *
-from fixtures import *
+from models import *  # pylint: disable=import-error,wildcard-import
+from fixtures import *  # pylint: disable=import-error,wildcard-import
 
 
 @pytest.mark.parametrize(
