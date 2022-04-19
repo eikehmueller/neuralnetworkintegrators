@@ -1,44 +1,10 @@
-import pytest
 import os
+import pytest
 import numpy as np
 from matplotlib import pyplot as plt
+from fixtures import *
 from dynamical_system import *  # pylint: disable=import-error,wildcard-import
 from time_integrator import *  # pylint: disable=import-error,wildcard-import
-
-
-@pytest.fixture()
-def harmonic_oscillator():
-    """Construct one dimensional harmonic oscillator instance"""
-    mass = 1.2
-    k_spring = 0.9
-    return HarmonicOscillator(mass, k_spring)
-
-
-@pytest.fixture()
-def coupled_harmonic_oscillators():
-    """Construct coupled harmonic oscillator instance"""
-    mass = [1.2, 0.8]
-    k_spring = [0.9, 1.1]
-    k_spring_c = 0.4
-    return CoupledHarmonicOscillators(mass, k_spring, k_spring_c)
-
-
-@pytest.fixture()
-def double_pendulum():
-    """Construct double pendulum instance"""
-    mass = [1.2, 0.8]
-    L0, L1 = 0.8, 1.2
-    return DoublePendulum(mass, L0, L1)
-
-
-@pytest.fixture()
-def coupled_pendulums():
-    """Construct instance of coupled pendulums"""
-    mass = 1.2
-    L_rod = 0.9
-    d_anchor = 1.1
-    k_spring = 0.3
-    return CoupledPendulums(mass, L_rod, d_anchor, k_spring)
 
 
 @pytest.mark.parametrize(
@@ -185,12 +151,12 @@ def convergence(Integrator, dynamical_system, output_dir="./convergence_plots/")
         C0 * H**order,
         linewidth=2,
         color="red",
-        label="fit $\propto h^{" + f"{order:4.2f}" + "}$",
+        label=r"fit $\propto h^{" + f"{order:4.2f}" + "}$",
     )
     ax = plt.gca()
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("timestep size $\Delta t$")
+    ax.set_xlabel(r"timestep size $\Delta t$")
     ax.set_ylabel("error $||qp-qp_{exact}||$")
     plt.legend(loc="lower right")
     integrator_label = Integrator.__name__
