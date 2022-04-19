@@ -580,9 +580,9 @@ class CoupledPendulums(DynamicalSystem):
         phi = sqrt( z0*z0 + z1*z1 );
         C_tmp = {self.k_spring} * {self.L_rod} * ({self.d_anchor}/phi - 1.0);        
         dHq[0] = C_tmp * ( ({self.d_anchor}) * cos_q0 - {self.L_rod} * sin_q0_q1)
-               + {self.g_grav} / {self.L_rod} * sin_q0;
+               + {self.g_grav} * {self.mass} * {self.L_rod} * sin_q0;
         dHq[1] = C_tmp * ( -{self.d_anchor} * cos_q1 + ({self.L_rod}) * sin_q0_q1)
-               + {self.g_grav} / {self.L_rod} * sin_q1;
+               + {self.g_grav} * {self.mass} * {self.L_rod} * sin_q1;
         """
         self.dHp_update_code = f"""
         dHp[0] = p[0] / ({self.mass}*{self.L_rod}*{self.L_rod});
@@ -613,11 +613,11 @@ class CoupledPendulums(DynamicalSystem):
 
         dH/dtheta_0 = dV_pot/dtheta_0
             = C * ( d_anchor*cos(theta_0) - L_rod*sin(theta_0-theta_1) )
-              + g_grav/L_rod*sin(theta_0)
+              + g_grav*mass*L_rod*sin(theta_0)
 
         dH/dtheta_1 = dV_pot/dtheta_1
             = C * ( - d_anchor*cos(theta_0) + L_rod*sin(theta_0-theta_1) )
-              + g_grav/L_rod*sin(theta_1)
+              + g_grav*mass*L_rod*sin(theta_1)
 
         where
 
@@ -631,10 +631,10 @@ class CoupledPendulums(DynamicalSystem):
         C_tmp = self.k_spring * self.L_rod * (self.d_anchor - phi) / phi
         dHq[0] = C_tmp * (
             self.d_anchor * np.cos(q[0]) - self.L_rod * np.sin(q[0] - q[1])
-        ) + self.g_grav / self.L_rod * np.sin(q[0])
+        ) + self.g_grav * self.mass * self.L_rod * np.sin(q[0])
         dHq[1] = C_tmp * (
             -self.d_anchor * np.cos(q[1]) + self.L_rod * np.sin(q[0] - q[1])
-        ) + self.g_grav / self.L_rod * np.sin(q[1])
+        ) + self.g_grav * self.mass * self.L_rod * np.sin(q[1])
 
     def compute_dHp(self, q, p, dHp):
         """Compute dH/dp
