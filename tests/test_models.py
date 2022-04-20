@@ -1,5 +1,6 @@
 """Tests of neural network models"""
 import pytest
+import inspect
 import numpy as np
 import tensorflow as tf
 from dynamical_system import *  # pylint: disable=import-error,wildcard-import
@@ -16,7 +17,7 @@ from fixtures import *  # pylint: disable=import-error,wildcard-import
         "coupled_pendulums",
     ],
 )
-def test_verlet_model(dynamical_system_name, request):
+def test_verlet_model(dynamical_system_name, request, monkeypatch):
     """Check that integrating with the Verlet model gives the same results as the corresponding
     time integrator
 
@@ -26,13 +27,13 @@ def test_verlet_model(dynamical_system_name, request):
     tolerance = 1.0e-12
     dt = 0.1
     dynamical_system = request.getfixturevalue(dynamical_system_name)
+    # replace numpy by tensorflow
+    monkeypatch.setattr(inspect.getmodule(dynamical_system), "np", tf)
     dim = dynamical_system.dim
     q0 = np.random.uniform(low=0, high=1, size=dim)
     p0 = np.zeros(dim)
     verlet_integrator = VerletIntegrator(dynamical_system, dt)
     nn_verlet_integrator = VerletModel(dim, dt, None, None)
-
-    dynamical_system.backend = tf
     nn_verlet_integrator.V_pot = dynamical_system.V_pot
     nn_verlet_integrator.T_kin = dynamical_system.T_kin
     n_steps = 10
@@ -57,7 +58,7 @@ def test_verlet_model(dynamical_system_name, request):
         "coupled_pendulums",
     ],
 )
-def test_strang_splitting_model(dynamical_system_name, request):
+def test_strang_splitting_model(dynamical_system_name, request, monkeypatch):
     """Check that integrating with the Strang Splitting model gives the same results as the
     corresponding time integrator
 
@@ -68,13 +69,13 @@ def test_strang_splitting_model(dynamical_system_name, request):
     tolerance = 1.0e-12
     dt = 0.1
     dynamical_system = request.getfixturevalue(dynamical_system_name)
+    # replace numpy by tensorflow
+    monkeypatch.setattr(inspect.getmodule(dynamical_system), "np", tf)
     dim = dynamical_system.dim
     q0 = np.random.uniform(low=0, high=1, size=dim)
     p0 = np.zeros(dim)
     strang_splitting_integrator = StrangSplittingIntegrator(dynamical_system, dt)
     nn_strang_splitting_integrator = StrangSplittingModel(dim, dt, None)
-
-    dynamical_system.backend = tf
     nn_strang_splitting_integrator.Hamiltonian = dynamical_system.energy
     n_steps = 1
     strang_splitting_integrator.set_state(q0, p0)

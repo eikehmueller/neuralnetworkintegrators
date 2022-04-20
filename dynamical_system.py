@@ -26,7 +26,6 @@ class DynamicalSystem(ABC):
         self.dH_preamble_code = None
         self.dH_update_code = None
         self.separable = False
-        self.backend = np  # Backend for numpy
 
     @abstractmethod
     def compute_dHq(self, q, p, dHq):
@@ -435,9 +434,7 @@ class DoublePendulum(DynamicalSystem):
         :arg q: Position angles (2-dimensional array)
         """
         return 1 / (
-            self.L0
-            * self.L1
-            * (self.mass[0] + self.mass[1] * self.backend.sin(q[0] - q[1]) ** 2)
+            self.L0 * self.L1 * (self.mass[0] + self.mass[1] * np.sin(q[0] - q[1]) ** 2)
         )
 
     def compute_dHq(self, q, p, dHq):
@@ -523,14 +520,14 @@ class DoublePendulum(DynamicalSystem):
 
         # Potential Energy
         V_pot = self.g_grav * (
-            (self.mass[0] + self.mass[1]) * self.L0 * (1 - self.backend.cos(q[0]))
-            + self.mass[1] * self.L1 * (1 - self.backend.cos(q[1]))
+            (self.mass[0] + self.mass[1]) * self.L0 * (1 - np.cos(q[0]))
+            + self.mass[1] * self.L1 * (1 - np.cos(q[1]))
         )
         T_kin = 0.5 * (
             (
                 self.L1**2 * p[0] ** 2
                 + (1 + self.mass[0] / self.mass[1]) * self.L0**2 * p[1] ** 2
-                - 2 * self.L0 * self.L1 * p[0] * p[1] * self.backend.cos(q[0] - q[1])
+                - 2 * self.L0 * self.L1 * p[0] * p[1] * np.cos(q[0] - q[1])
             )
             * self._kappa(q)
             / (self.L0 * self.L1)
@@ -630,14 +627,9 @@ class CoupledPendulums(DynamicalSystem):
         :arg theta_0: angle of first bob
         :arg theta_1: angle of second bob
         """
-        return self.backend.sqrt(
-            (
-                self.d_anchor
-                + self.L_rod * (self.backend.sin(theta_1) - self.backend.sin(theta_0))
-            )
-            ** 2
-            + self.L_rod**2
-            * (self.backend.cos(theta_1) - self.backend.cos(theta_0)) ** 2
+        return np.sqrt(
+            (self.d_anchor + self.L_rod * (np.sin(theta_1) - np.sin(theta_0))) ** 2
+            + self.L_rod**2 * (np.cos(theta_1) - np.cos(theta_0)) ** 2
         )
 
     def compute_dHq(self, q, p, dHq):
@@ -728,7 +720,7 @@ class CoupledPendulums(DynamicalSystem):
         return 1 / 2 * self.k_spring * (
             self._phi(q[0], q[1]) - self.d_anchor
         ) ** 2 + self.mass * self.g_grav * self.L_rod * (
-            2 - self.backend.cos(q[0]) - self.backend.cos(q[1])
+            2 - np.cos(q[0]) - np.cos(q[1])
         )
 
     def energy(self, q, p):
