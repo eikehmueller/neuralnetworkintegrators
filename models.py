@@ -1,5 +1,4 @@
 """Neural network models"""
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
@@ -15,7 +14,15 @@ class SymplecticModel(keras.Model):
         """
         super().__init__()
         self.dim = dim
-        self.dt = dt
+        self.__dt = tf.Variable(dt, dtype=tf.float32)
+
+    @property
+    def dt(self):
+        return self.__dt
+
+    @dt.setter
+    def dt(self, dt_new):
+        self.__dt.assign(dt_new)
 
     def call(self, inputs):
         """Evaluate model
@@ -233,8 +240,8 @@ class StrangSplittingModel(SymplecticModel):
         :arg x_n: current position x_n in extended phase space
         :arg y_n: current momentum y_n in extended phase space
         """
-        cos_2omega_dt = np.cos(2.0 * self.omega * self.dt)
-        sin_2omega_dt = np.sin(2.0 * self.omega * self.dt)
+        cos_2omega_dt = tf.cos(2.0 * self.omega * self.dt)
+        sin_2omega_dt = tf.sin(2.0 * self.omega * self.dt)
         # **** H_A update ****
         dH_dq, dH_dy = tf.gradients(self.Hamiltonian(q_n, y_n), [q_n, y_n])
         x_n = x_n + 0.5 * self.dt * dH_dy
@@ -253,7 +260,7 @@ class StrangSplittingModel(SymplecticModel):
             )
             / 2,
             (
-                -sin_2omega_dt * q_n
+                -1 * sin_2omega_dt * q_n
                 + (1 + cos_2omega_dt) * p_n
                 + sin_2omega_dt * x_n
                 + (1 - cos_2omega_dt) * y_n

@@ -21,12 +21,24 @@ class NNIntegrator(object):
 
     def __init__(self, dynamical_system, dt, nsteps, learning_rate=1.0e-4):
         self.dynamical_system = dynamical_system
-        self.dt = dt
+        self._dt = dt
         self.dim = 2 * self.dynamical_system.dim
         self.nsteps = nsteps
         self.qp = np.zeros((1, self.nsteps, self.dim))
         self.learning_rate = learning_rate
         self.model = None
+
+    @property
+    def dt(self):
+        """Timestep size"""
+        return self._dt
+
+    @dt.setter
+    def dt(self, new_dt):
+        """Set timestep size
+
+        :arg new_dt: new value of timestep size"""
+        self._dt = new_dt
 
     def set_state(self, q, p):
         """Set the current state of the integrator
@@ -77,6 +89,7 @@ class MultistepNNIntegrator(NNIntegrator):
         self, dynamical_system, dt, nsteps, dense_layers=None, learning_rate=1.0e-4
     ):
         super().__init__(dynamical_system, dt, nsteps, learning_rate)
+        self.__dt_tf = dt
         self.dim = 2 * self.dynamical_system.dim
         if dense_layers:
             self.dense_layers = dense_layers
@@ -90,7 +103,7 @@ class MultistepNNIntegrator(NNIntegrator):
         for layer in dense_layers:
             x = layer(x)
         x = output_layer(x)
-        x = keras.layers.Rescaling(self.dt)(x)
+        x = keras.layers.Rescaling(self.__dt_tf)(x)
         outputs = keras.layers.Add()([q_n, x])
         self.model = keras.Model(inputs=inputs, outputs=outputs)
         self.model.compile(
@@ -99,6 +112,21 @@ class MultistepNNIntegrator(NNIntegrator):
             optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
         )
         self.qp = np.zeros((1, self.nsteps, self.dim))
+
+    @property
+    def dt(self):
+        """Timesteps size"""
+        return self._dt
+
+    @dt.setter
+    def dt(self, new_dt):
+        """Set timestep size
+
+        This also sets the tensorflow timestep of the underlying multistep model
+
+        :arg new_dt: new value of timestep size"""
+        self.dt = new_dt
+        self.__dt_tf.assign(new_dt)
 
     @classmethod
     def from_model(cls, dynamical_system, dt, model):
@@ -125,6 +153,22 @@ class HamiltonianNNIntegrator(NNIntegrator):
     ):
         """Construct new instance"""
         super().__init__(dynamical_system, dt, 1, learning_rate)
+
+    @property
+    def dt(self):
+        """Timesteps size"""
+        return self._dt
+
+    @dt.setter
+    def dt(self, new_dt):
+        """Set timestep size.
+
+        This also sets the tensorflow timestep of the underlying model
+
+        :arg new_dt: new value of timestep size"""
+        self._dt = new_dt
+        # Set the (tensorflow) timestep of the underlying model
+        self.model.layers[-1].dt = new_dt
 
     @classmethod
     def from_model(cls, dynamical_system, dt, model):
