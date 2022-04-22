@@ -26,19 +26,7 @@ class NNIntegrator(object):
         self.nsteps = nsteps
         self.qp = np.zeros((1, self.nsteps, self.dim))
         self.learning_rate = learning_rate
-
-    @classmethod
-    def from_model(cls, dynamical_system, dt, model, learning_rate=1.0e-4):
-        """Construct integrator from model
-
-        :arg dynamical_system: underlying dynamical system
-        :arg dt: timestep size
-        :arg model: neural network model
-        """
-        nsteps = model.input_shape[1]
-        nn_integrator = cls(dynamical_system, dt, nsteps, learning_rate)
-        nn_integrator.model = model  # pylint: disable=attribute-defined-outside-init
-        return nn_integrator
+        self.model = None
 
     def set_state(self, q, p):
         """Set the current state of the integrator
@@ -86,11 +74,14 @@ class MultistepNNIntegrator(NNIntegrator):
     """
 
     def __init__(
-        self, dynamical_system, dt, nsteps, dense_layers, learning_rate=1.0e-4
+        self, dynamical_system, dt, nsteps, dense_layers=None, learning_rate=1.0e-4
     ):
         super().__init__(dynamical_system, dt, nsteps, learning_rate)
         self.dim = 2 * self.dynamical_system.dim
-        self.dense_layers = dense_layers
+        if dense_layers:
+            self.dense_layers = dense_layers
+        else:
+            self.dense_layers = []
         # Build model
         inputs = keras.Input(shape=(self.nsteps, self.dim))
         q_n = tf.unstack(inputs, axis=1)[-1]
@@ -109,6 +100,19 @@ class MultistepNNIntegrator(NNIntegrator):
         )
         self.qp = np.zeros((1, self.nsteps, self.dim))
 
+    @classmethod
+    def from_model(cls, dynamical_system, dt, model):
+        """Construct integrator from model
+
+        :arg dynamical_system: underlying dynamical system
+        :arg dt: timestep size
+        :arg model: neural network model
+        """
+        nsteps = model.input_shape[1]
+        nn_integrator = cls(dynamical_system, dt, nsteps)
+        nn_integrator.model = model  # pylint: disable=attribute-defined-outside-init
+        return nn_integrator
+
 
 class HamiltonianNNIntegrator(NNIntegrator):
     """Neural network integrator based on a Hamiltonian update"""
@@ -121,6 +125,18 @@ class HamiltonianNNIntegrator(NNIntegrator):
     ):
         """Construct new instance"""
         super().__init__(dynamical_system, dt, 1, learning_rate)
+
+    @classmethod
+    def from_model(cls, dynamical_system, dt, model):
+        """Construct integrator from model
+
+        :arg dynamical_system: underlying dynamical system
+        :arg dt: timestep size
+        :arg model: neural network model
+        """
+        nn_integrator = cls(dynamical_system, dt)
+        nn_integrator.model = model  # pylint: disable=attribute-defined-outside-init
+        return nn_integrator
 
     def save_layers(self, layers, final_layer, filename):
         """Save list of layers in a given file
@@ -202,15 +218,21 @@ class HamiltonianVerletNNIntegrator(HamiltonianNNIntegrator):
         self,
         dynamical_system,
         dt,
-        V_pot_layers,
-        T_kin_layers,
+        V_pot_layers=None,
+        T_kin_layers=None,
         V_pot_layer_weights=None,
         T_kin_layer_weights=None,
         learning_rate=1.0e-4,
     ):
         super().__init__(dynamical_system, dt, learning_rate)
-        self.V_pot_layers = V_pot_layers
-        self.T_kin_layers = T_kin_layers
+        if V_pot_layers:
+            self.V_pot_layers = V_pot_layers
+        else:
+            self.V_pot_layers = []
+        if T_kin_layers:
+            self.T_kin_layers = T_kin_layers
+        else:
+            self.T_kin_layers = []
         self.model = self.build_model(
             self.dim,
             self.dt,
@@ -310,7 +332,7 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         self,
         dynamical_system,
         dt,
-        H_layers,
+        H_layers=None,
         H_layer_weights=None,
         learning_rate=1.0e-4,
     ):
@@ -322,8 +344,12 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         :arg learning_rate: Learning rate used during training
         """
         super().__init__(dynamical_system, dt, learning_rate)
-        self.H_layers = H_layers
+        if H_layers:
+            self.H_layers = H_layers
+        else:
+            self.H_layers = []
         self.H_layer_weights = H_layer_weights
+        self.qpxy = np.zeros((1, 1, 2 * self.dim))  # extended state
         self.model = self.build_model(
             self.dim,
             self.dt,
@@ -347,11 +373,11 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         :arg H_layers: Layers used for Hamiltonian network
         :arg learning_rate: learning rate
         """
-        inputs = keras.Input(shape=(1, dim))
-        strang_splitting_model = StrangSplittingModel(dim, dt, H_layers)
+        inputs = keras.Input(shape=(1, 2 * dim))
+        strang_splitting_model = StrangSplittingModel(2 * dim, dt, H_layers)
         outputs = strang_splitting_model(inputs)
         model = keras.Model(inputs=inputs, outputs=outputs)
-        model.build(input_shape=(None, 1, dim))
+        model.build(input_shape=(None, 1, 2 * dim))
         strang_splitting_model.set_weights(H_layer_weights)
         model.compile(
             loss="mse",
@@ -359,6 +385,56 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
             optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
         )
         return model
+
+    def set_state(self, q, p):
+        """Set the current state of the integrator
+
+        :arg q: Array of size 1 x dim with initial positions
+        :arg p: Array of size 1 x dim with initial momenta
+        """
+        self.qpxy[0, :, : self.dim // 2] = q[:, :]
+        self.qpxy[0, :, self.dim // 2 : self.dim] = p[:, :]
+        self.qpxy[0, :, self.dim : 3 * self.dim // 2] = q[:, :]
+        self.qpxy[0, :, 3 * self.dim // 2 :] = p[:, :]
+
+    def set_extended_state(self, x, y):
+        """Set the current extended state of the integrator
+
+        :arg x: Array of size 1 x dim with initial positions in extended phase space
+        :arg y: Array of size 1 x dim with initial momenta
+        """
+        self.qpxy[0, :, self.dim : 3 * self.dim // 2] = x[:, :]
+        self.qpxy[0, :, 3 * self.dim // 2 :] = y[:, :]
+
+    @property
+    def q(self):
+        """Return the current extended position vector (as a d-dimensional array)"""
+        return self.qpxy[0, -1, : self.dim // 2]
+
+    @property
+    def p(self):
+        """Return the current extended velocity vector (as a d-dimensional array)"""
+        return self.qpxy[0, -1, self.dim // 2 : self.dim]
+
+    @property
+    def x(self):
+        """Return the current extended position vector (as a d-dimensional array)"""
+        return self.qpxy[0, -1, self.dim : 3 * self.dim // 2]
+
+    @property
+    def y(self):
+        """Return the current extended velocity vector (as a d-dimensional array)"""
+        return self.qpxy[0, -1, 3 * self.dim // 2 :]
+
+    def integrate(self, n_steps):
+        """Carry out a given number of integration steps
+
+        :arg n_steps: number of integration steps
+        """
+        for _ in range(n_steps):
+            qpxy_pred = np.asarray(self.model.predict(self.qpxy)).flatten()
+            self.qpxy = np.roll(self.qpxy, -1, axis=1)
+            self.qpxy[0, -1, :] = qpxy_pred[:]
 
     def save_model(self, dirname):
         """Save Hamiltonian model to disk

@@ -3,6 +3,7 @@ import string
 import subprocess
 import ctypes
 import hashlib
+import re
 import os
 import numpy as np
 
@@ -55,6 +56,12 @@ class TimeIntegrator(ABC):
 
           void timestepper(double* q, double* p, int nsteps) { ... }
 
+        (note that the signature might be
+
+          void timestepper(double* q, double* p, double* x, double* y, int nsteps) { ... }
+
+        for extended state space integrators)
+
         :arg c_sourcecode: C source code
         """
         # If this is the case, auto-generate fast C code for the Velocity Verlet update
@@ -92,9 +99,17 @@ class TimeIntegrator(ABC):
                 check=True,
             )
             timestepper_lib = ctypes.CDLL(so_file).timestepper
-            timestepper_lib.argtypes = [
+            # Work out the number of pointer arguments
+            function_definition = list(
+                filter(
+                    re.compile(".*void timestepper.*").match,
+                    c_substituted_sourcecode.split("\n"),
+                )
+            )[0]
+            n_pointer_args = function_definition.count("*")
+            timestepper_lib.argtypes = n_pointer_args * [
                 np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-                np.ctypeslib.ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+            ] + [
                 np.ctypeslib.c_intp,
             ]
             return timestepper_lib
@@ -253,7 +268,10 @@ class StrangSplittingIntegrator(TimeIntegrator):
         # Extended phase space variables
         self.x = np.zeros(dynamical_system.dim)
         self.y = np.zeros(dynamical_system.dim)
-        self.qpxy = np.zeros((4, dynamical_system.dim))
+        self._q = np.zeros(dynamical_system.dim)
+        self._p = np.zeros(dynamical_system.dim)
+        self._x = np.zeros(dynamical_system.dim)
+        self._y = np.zeros(dynamical_system.dim)
         self.omega = omega
         self.cos_2omega_dt = np.cos(2.0 * self.omega * self.dt)
         self.sin_2omega_dt = np.sin(2.0 * self.omega * self.dt)
@@ -262,15 +280,9 @@ class StrangSplittingIntegrator(TimeIntegrator):
         $DH_HEADER_CODE
         #include <stdlib.h>
         #include "math.h"
-        void timestepper(double* q, double* p, int nsteps) {
+        void timestepper(double* q, double* p, double* x, double* y,int nsteps) {
             double dHq[$DIM];
             double dHp[$DIM];
-            double* x = (double*) malloc($DIM*sizeof(double));
-            double* y = (double*) malloc($DIM*sizeof(double));
-            for (int j=0;j<$DIM;++j) {
-                x[j] = q[j];
-                y[j] = p[j];
-            }
             double* tmp;
             double _q[$DIM];
             double _p[$DIM];
@@ -338,18 +350,15 @@ class StrangSplittingIntegrator(TimeIntegrator):
                     p[j] -= 0.5*$DT*dHq[j];
                 }
             }
-            free(x);
-            free(y);
         }
         """
         ).safe_substitute(OMEGA=self.omega)
         self.timestepper_library = self._generate_timestepper_library(c_sourcecode)
 
     def set_state(self, q, p):
-        """Set the current state of the integrator to a specified
-        position and momentum.
+        """Set the current state of the integrator to a specified position and momentum.
 
-        We need to overwrite the base class method to also set x and y
+        Position and momentum in the extended space are set to the same values.
 
         :arg q: New position vector
         :arg p: New momentum vector
@@ -358,6 +367,15 @@ class StrangSplittingIntegrator(TimeIntegrator):
         self.p[:] = p[:]
         self.x[:] = q[:]
         self.y[:] = p[:]
+
+    def set_extended_state(self, x, y):
+        """Explicitly set position and momentum in extended phase space.
+
+        :arg x: New position vector in extended phase space
+        :arg y: New momentum vector in extended phase space
+        """
+        self.x[:] = x[:]
+        self.y[:] = y[:]
 
     def _step_HA(self):
         """Step with Hamiltonian H_A
@@ -384,34 +402,34 @@ class StrangSplittingIntegrator(TimeIntegrator):
 
         Carries out a step of size dt with the Hamiltonian H_B
         """
-        self.qpxy[0, :] = 0.5 * (
+        self._q[:] = 0.5 * (
             (1 + self.cos_2omega_dt) * self.q[:]
             + self.sin_2omega_dt * self.p[:]
             + (1 - self.cos_2omega_dt) * self.x[:]
             - self.sin_2omega_dt * self.y[:]
         )
-        self.qpxy[1, :] = 0.5 * (
+        self._p[:] = 0.5 * (
             -self.sin_2omega_dt * self.q[:]
             + (1 + self.cos_2omega_dt) * self.p[:]
             + self.sin_2omega_dt * self.x[:]
             + (1 - self.cos_2omega_dt) * self.y[:]
         )
-        self.qpxy[2, :] = 0.5 * (
+        self._x[:] = 0.5 * (
             (1 - self.cos_2omega_dt) * self.q[:]
             - self.sin_2omega_dt * self.p[:]
             + (1 + self.cos_2omega_dt) * self.x[:]
             + self.sin_2omega_dt * self.y[:]
         )
-        self.qpxy[3, :] = 0.5 * (
+        self._y[:] = 0.5 * (
             self.sin_2omega_dt * self.q[:]
             + (1 - self.cos_2omega_dt) * self.p[:]
             - self.sin_2omega_dt * self.x[:]
             + (1 + self.cos_2omega_dt) * self.y[:]
         )
-        self.q[:] = self.qpxy[0, :]
-        self.p[:] = self.qpxy[1, :]
-        self.x[:] = self.qpxy[2, :]
-        self.y[:] = self.qpxy[3, :]
+        self.q[:] = self._q[:]
+        self.p[:] = self._p[:]
+        self.x[:] = self._x[:]
+        self.y[:] = self._y[:]
 
     def integrate(self, n_steps):
         """Carry out n_step timesteps, starting from the current set_state
@@ -420,7 +438,7 @@ class StrangSplittingIntegrator(TimeIntegrator):
         :arg steps: Number of integration steps
         """
         if self.fast_code:
-            self.timestepper_library(self.q, self.p, n_steps)
+            self.timestepper_library(self.q, self.p, self.x, self.y, n_steps)
         else:
             for _ in range(n_steps):
                 self._step_HA()

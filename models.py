@@ -222,19 +222,19 @@ class StrangSplittingModel(SymplecticModel):
         return x
 
     @tf.function
-    def step(self, q_n, p_n):
-        """Carry out a single Stoermer-Verlet step
+    def step(self, q_n, p_n, x_n, y_n):
+        """Carry out a single Strang splitting step in extended phase space
 
-        This function maps (q_n,p_n) to (q_{n+1},p_{n+1}) using a single Stoermer
-        Verlet step
+        This function maps (q_n,p_n,x_n,y_n) to (q_{n+1},p_{n+1},x_{n+1},y_{n+1})
+        using a single strang splitting
 
         :arg q_n: current position q_n
         :arg p_n: current momentum p_n
+        :arg x_n: current position x_n in extended phase space
+        :arg y_n: current momentum y_n in extended phase space
         """
         cos_2omega_dt = np.cos(2.0 * self.omega * self.dt)
         sin_2omega_dt = np.sin(2.0 * self.omega * self.dt)
-        x_n = q_n
-        y_n = p_n
         # **** H_A update ****
         dH_dq, dH_dy = tf.gradients(self.Hamiltonian(q_n, y_n), [q_n, y_n])
         x_n = x_n + 0.5 * self.dt * dH_dy
@@ -283,4 +283,36 @@ class StrangSplittingModel(SymplecticModel):
         dH_dq, dH_dy = tf.gradients(self.Hamiltonian(q_n, y_n), [q_n, y_n])
         x_n = x_n + 0.5 * self.dt * dH_dy
         p_n = p_n - 0.5 * self.dt * dH_dq
-        return q_n, p_n
+        return q_n, p_n, x_n, y_n
+
+    def call(self, inputs):
+        """Evaluate model
+
+        Split the inputs = (q_n,p_n,x_n,y_n) into position and momentum and
+        return the state (q_{n+1},p_{n+1},x_{n+1},y_{n+1}) at the next timestep.
+
+        Note that the expected tensor shape is B x 1 x 4d to be compatible with
+        the non-symplectic update.
+
+        :arg inputs: state (q_n,p_n,x_n,y_n) as a B x 1 x 4d tensor
+        """
+        input_shape = tf.shape(inputs)
+        # Extract q_n, p_n, x_n and y_n from input
+        qpxy_old = tf.unstack(
+            tf.reshape(
+                inputs,
+                (
+                    input_shape[0],
+                    input_shape[2],
+                ),
+            ),
+            axis=-1,
+        )
+        q_old = tf.stack(qpxy_old[: self.dim // 4], axis=-1)
+        p_old = tf.stack(qpxy_old[self.dim // 4 : self.dim // 2], axis=-1)
+        x_old = tf.stack(qpxy_old[self.dim // 2 : 3 * self.dim // 4], axis=-1)
+        y_old = tf.stack(qpxy_old[3 * self.dim // 4 :], axis=-1)
+        q_new, p_new, x_new, y_new = self.step(q_old, p_old, x_old, y_old)
+        # Combine result of Verlet step into tensor of correct size
+        outputs = tf.concat([q_new, p_new, x_new, y_new], -1)
+        return outputs
