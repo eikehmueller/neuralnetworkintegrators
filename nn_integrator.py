@@ -91,17 +91,14 @@ class MultistepNNIntegrator(NNIntegrator):
         super().__init__(dynamical_system, dt, nsteps, learning_rate)
         self.__dt_tf = dt
         self.dim = 2 * self.dynamical_system.dim
-        if dense_layers:
-            self.dense_layers = dense_layers
-        else:
-            self.dense_layers = []
         # Build model
         inputs = keras.Input(shape=(self.nsteps, self.dim))
         q_n = tf.unstack(inputs, axis=1)[-1]
         output_layer = keras.layers.Dense(self.dim)
         x = inputs
-        for layer in dense_layers:
-            x = layer(x)
+        if dense_layers:
+            for layer in dense_layers:
+                x = layer(x)
         x = output_layer(x)
         x = keras.layers.Rescaling(self.__dt_tf)(x)
         outputs = keras.layers.Add()([q_n, x])
