@@ -18,10 +18,12 @@ class SymplecticModel(keras.Model):
 
     @property
     def dt(self):
+        """Return imestep size"""
         return self.__dt
 
     @dt.setter
     def dt(self, dt_new):
+        """Set timestep size"""
         self.__dt.assign(dt_new)
 
     def call(self, inputs):
