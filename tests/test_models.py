@@ -25,7 +25,7 @@ def test_verlet_model(dynamical_system_name, request, monkeypatch):
     integrator with explicit expressions for the kinetic and potential energy
     """
     np.random.seed(461857)
-    tolerance = 1.0e-12
+    tolerance = 1.0e-6
     dt = 0.1
     dynamical_system = request.getfixturevalue(dynamical_system_name)
     # replace numpy by tensorflow
@@ -37,11 +37,11 @@ def test_verlet_model(dynamical_system_name, request, monkeypatch):
     nn_verlet_model = VerletModel(dim, dt, None, None)
     nn_verlet_model.V_pot = dynamical_system.V_pot
     nn_verlet_model.T_kin = dynamical_system.T_kin
-    n_steps = 10
+    n_steps = 4
     verlet_integrator.set_state(q0, p0)
     verlet_integrator.integrate(n_steps)
-    q_nn = np.array(q0)
-    p_nn = np.array(p0)
+    q_nn = np.array(q0, dtype=np.float32)
+    p_nn = np.array(p0, dtype=np.float32)
     for _ in range(n_steps):
         q_nn, p_nn = nn_verlet_model.step(q_nn, p_nn)
     diff = np.zeros(2 * dim)
@@ -67,7 +67,7 @@ def test_strang_splitting_model(dynamical_system_name, request, monkeypatch):
     integrator with an explicit expressions for the Hamiltonian
     """
     np.random.seed(461857)
-    tolerance = 1.0e-12
+    tolerance = 1.0e-6
     dt = 0.1
     dynamical_system = request.getfixturevalue(dynamical_system_name)
     # replace numpy by tensorflow
@@ -80,14 +80,14 @@ def test_strang_splitting_model(dynamical_system_name, request, monkeypatch):
     strang_splitting_integrator = StrangSplittingIntegrator(dynamical_system, dt)
     nn_strang_splitting_model = StrangSplittingModel(4 * dim, dt, None)
     nn_strang_splitting_model.Hamiltonian = dynamical_system.energy
-    n_steps = 10
+    n_steps = 4
     strang_splitting_integrator.set_state(q0, p0)
     strang_splitting_integrator.set_extended_state(x0, y0)
     strang_splitting_integrator.integrate(n_steps)
-    q_nn = np.array(q0)
-    p_nn = np.array(p0)
-    x_nn = np.array(x0)
-    y_nn = np.array(y0)
+    q_nn = np.array(q0, dtype=np.float32)
+    p_nn = np.array(p0, dtype=np.float32)
+    x_nn = np.array(x0, dtype=np.float32)
+    y_nn = np.array(y0, dtype=np.float32)
     for _ in range(n_steps):
         q_nn, p_nn, x_nn, y_nn = nn_strang_splitting_model.step(q_nn, p_nn, x_nn, y_nn)
     diff = np.zeros(4 * dim)
