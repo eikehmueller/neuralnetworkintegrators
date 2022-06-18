@@ -199,14 +199,14 @@ class HamiltonianNNIntegrator(NNIntegrator):
         with open(filename, "w", encoding="utf8") as f:
             json.dump(layer_list, f, cls=auxilliary.ndarrayEncoder, indent=4)
 
-    def save_specification(self, dirname):
+    def save_specification(self, specs, dirname):
         """Save model specifications to file
 
         Write the file specifications.json in a specified directory
 
+        :arg specs: dictionary of specifications to save
         :arg dirname: model directory
         """
-        specs = {"dt": self.dt, "dim": self.dim}
         shutil.rmtree(dirname, ignore_errors=True)
         os.mkdir(dirname)
         with open(dirname + "/specifications.json", "w", encoding="utf8") as f:
@@ -325,7 +325,8 @@ class HamiltonianVerletNNIntegrator(HamiltonianNNIntegrator):
 
         :arg dirname: Name of directory to save model to
         """
-        self.save_specification(dirname)
+        specs = {"dt": self.dt, "dim": self.dim}
+        self.save_specification(specs, dirname)
         verlet_model = self.model.layers[-1]
         self.save_layers(
             self.V_pot_layers,
@@ -375,6 +376,7 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         dt,
         H_layers=None,
         H_layer_weights=None,
+        omega=10.0,
         learning_rate=1.0e-4,
     ):
         """Construct new instance
@@ -382,9 +384,11 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         :arg dynamical_system: Underlying dynamical system
         :arg dt: timestep size
         :arg H_layers: intermediate layers of Hamiltonian neural network
+        :arg omega: stability parameter omega in Strang splitting
         :arg learning_rate: Learning rate used during training
         """
         super().__init__(dynamical_system, dt, learning_rate)
+        self.omega = omega
         if H_layers:
             self.H_layers = H_layers
         else:
@@ -396,6 +400,7 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
             self.dt,
             self.H_layers,
             self.H_layer_weights,
+            self.omega,
             self.learning_rate,
         )
 
@@ -405,6 +410,7 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         dt,
         H_layers,
         H_layer_weights,
+        omega=1.0,
         learning_rate=1.0e-4,
     ):
         """Build underlying Strang splitting model
@@ -412,10 +418,13 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         :arg dim: dimension of dynamical system
         :arg dt: timestep size
         :arg H_layers: Layers used for Hamiltonian network
+        :arg omega: coupling parameter for extended phase space evolution
         :arg learning_rate: learning rate
         """
         inputs = keras.Input(shape=(1, 2 * dim))
-        strang_splitting_model = StrangSplittingModel(2 * dim, dt, H_layers)
+        strang_splitting_model = StrangSplittingModel(
+            2 * dim, dt, H_layers, omega=omega
+        )
         outputs = strang_splitting_model(inputs)
         model = keras.Model(inputs=inputs, outputs=outputs)
         model.build(input_shape=(None, 1, 2 * dim))
@@ -485,7 +494,8 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
 
         :arg dirname: Name of directory to save model to
         """
-        self.save_specification(dirname)
+        specs = {"dt": self.dt, "dim": self.dim, "omega": self.omega}
+        self.save_specification(specs, dirname)
         strang_splitting_model = self.model.layers[-1]
         self.save_layers(
             self.H_layers,
@@ -502,13 +512,14 @@ class HamiltonianStrangSplittingNNIntegrator(HamiltonianNNIntegrator):
         """
         with open(dirname + "/specifications.json", encoding="utf8") as f:
             specs = json.load(f)
-        dim, dt = specs["dim"], specs["dt"]
+        dim, dt, omega = specs["dim"], specs["dt"], specs["omega"]
         H_layers, H_layer_weights = cls.load_layers(dirname + "/H_layers.json")
         model = cls.build_model(
             dim,
             dt,
             H_layers,
             H_layer_weights,
+            omega,
             learning_rate,
         )
         return model
