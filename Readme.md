@@ -18,8 +18,10 @@ Generating training samples can be expensive since it requires running the high-
 ## Dynamical systems
 Currently, the following dynamical systems have been implemented:
 * a simple harmonic oscillator
+* a system of two coupled harmonic oscillators
 * the classical double pendulum
 * a system of two pendulums which are suspended from the ceiling and coupled with a spring that follows Hooke's law.
+![Dynamical systems](figures/DynamicalSystems.svg)
 
 ## Mathematical details
 Further mathematical details can be found in [this notebook](NNIntegrators.ipynb).
