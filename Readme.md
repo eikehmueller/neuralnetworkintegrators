@@ -3,6 +3,7 @@
 # Neural-network based integrators for dynamical systems
 This code implements neural-network based numerical timestepping methods for dynamical systems. The central idea is that - if suitably trained - the neural network based integrators can achieve high accuracy even if the timestep in the numerical integration is large.
 
+![Neural network based integrators](figures/NNIntegratorSchematic.svg)
 
 The s-step method described in [Greydanus et al. (2019)](https://arxiv.org/abs/2004.06493) is used to solve general dynamical systems. Both the LSTM based network (as described in the paper) and a simpler dense neural network have been implemented here.
 
