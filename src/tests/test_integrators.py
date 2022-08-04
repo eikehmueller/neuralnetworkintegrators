@@ -2,6 +2,10 @@ import os
 import pytest
 import numpy as np
 from matplotlib import pyplot as plt
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fixtures import *  # pylint: disable=import-error,wildcard-import
 from dynamical_system import *  # pylint: disable=import-error,wildcard-import
 from time_integrator import *  # pylint: disable=import-error,wildcard-import

@@ -1,5 +1,10 @@
 """Fixtures used by all tests"""
 import pytest
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dynamical_system import *  # pylint: disable=import-error,wildcard-import
 
 
