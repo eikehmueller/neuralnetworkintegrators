@@ -1,1 +1,4 @@
 *.jpg
+.ipynb_checkpoints
+generated_code
+__pycache__
