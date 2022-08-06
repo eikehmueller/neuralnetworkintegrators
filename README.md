@@ -31,10 +31,10 @@ Further mathematical details can be found in [this notebook](NNIntegrators.ipynb
 ## Code structure
 The top level code is collected in Jupyter notebooks:
 ### Notebooks
-* [TrainNNIntegrators.ipynb](src/TrainNNIntegrators.ipynb) Train neural network based integrators. Use this notebook to train one of the neural network based integrators for a particular dynamical system.
-* [EvaluateNNIntegrators.ipynb](src/EvaluateNNIntegrators.ipynb) Evaluate the trained neural network based integrators by plotting the error and energy drift that arises when integrating over a long time interval.
-* [VisualiseLossHistories.ipynb](src/VisualiseLossHistories.ipynb) Visualises loss histories for different integrators (these were exported from tensorboard as `.csv` files).
-* [VisualiseIntegrators.ipynb](src/VisualiseIntegrators.ipynb) Visualise trajectories in phase space for standard integrators and the harmonic oscillator system. This is really just used to check that the integrators in [time_integrator.py](src/time_integrator.py) work as expected.
+* [TrainNNIntegrators.ipynb](TrainNNIntegrators.ipynb) Train neural network based integrators. Use this notebook to train one of the neural network based integrators for a particular dynamical system.
+* [EvaluateNNIntegrators.ipynb](EvaluateNNIntegrators.ipynb) Evaluate the trained neural network based integrators by plotting the error and energy drift that arises when integrating over a long time interval.
+* [VisualiseLossHistories.ipynb](VisualiseLossHistories.ipynb) Visualises loss histories for different integrators (these were exported from tensorboard as `.csv` files).
+* [VisualiseIntegrators.ipynb](VisualiseIntegrators.ipynb) Visualise trajectories in phase space for standard integrators and the harmonic oscillator system. This is really just used to check that the integrators in [time_integrator.py](src/time_integrator.py) work as expected.
 
 ### Python modules
 * [auxilliary.py](src/auxilliary.py) General auxilliary code. At the moment this only implements json decoders and encoders for numpy arrays, which are used for storing the weights of the bespoke Hamiltonian neural networks in [nn_integrator.py](src/nn_integrator.py).
@@ -50,7 +50,7 @@ in addition, the `ExactIntegrator` class can be used to generate the true trajec
 * [nn_integrator.py](src/nn_integrator.py) Implementation of neural network based integrators. Both s-step methods and symplectic methods are implemented. The underlying keras models are either standard keral models networks (for the s-step integrators) or instances of the classes implemented in [models.py](src/models.py).
 
 ## Testing
-A set of unit tests which can be run with `pytest` are collected in the directory `src/tests`.
+A set of unit tests which can be run with `pytest` are collected in the directory `tests`.
 
 ## Results
 The following plot show the position and the position error for the first pendulum in a system of two coupled pendulums. In the first row, the Verlet integrator for the exact Hamiltonian is run with a large timestep (marked *verlet coarse*). The second and third row show results for the neural network 6-step method with a dense network (marked *vanilla dense*) and LSTM network (marked *LSTM*) respectively. The final row is the Hamiltonian neural network integrator (marked *Hamiltonian*). 
