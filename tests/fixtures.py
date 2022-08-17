@@ -1,13 +1,7 @@
 """Fixtures used by all tests"""
 import pytest
-import os
-import sys
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
-)
-
-from dynamical_system import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.dynamical_system import *  # pylint: disable=import-error,wildcard-import
 
 
 @pytest.fixture()

@@ -2,10 +2,10 @@ import os
 import pytest
 import numpy as np
 from matplotlib import pyplot as plt
-import fixtures
+
 from fixtures import *  # pylint: disable=import-error,wildcard-import
-from dynamical_system import *  # pylint: disable=import-error,wildcard-import
-from time_integrator import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.dynamical_system import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.time_integrator import *  # pylint: disable=import-error,wildcard-import
 
 
 @pytest.mark.parametrize(
