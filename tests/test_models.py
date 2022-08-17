@@ -3,11 +3,11 @@ import inspect
 import pytest
 import numpy as np
 import tensorflow as tf
-import fixtures
+
 from fixtures import *  # pylint: disable=import-error,wildcard-import
-from dynamical_system import *  # pylint: disable=import-error,wildcard-import
-from time_integrator import *  # pylint: disable=import-error,wildcard-import
-from models import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.dynamical_system import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.time_integrator import *  # pylint: disable=import-error,wildcard-import
+from nn_integrators.models import *  # pylint: disable=import-error,wildcard-import
 
 
 @pytest.mark.parametrize(
