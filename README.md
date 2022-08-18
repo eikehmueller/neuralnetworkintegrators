@@ -28,6 +28,19 @@ Currently, the following dynamical systems have been implemented:
 ## Mathematical details
 Further mathematical details can be found in [this notebook](NNIntegrators.ipynb).
 
+## Installation
+Running the Jupyter notebooks for training and evaluating the neural network integrators requires installation with
+
+```
+python -m pip install .
+```
+
+If you want to edit the code, you might want prefer an editable install with
+
+```
+python -m pip install --editable .
+```
+
 ## Code structure
 The top level code is collected in Jupyter notebooks in the [src](./src) directory:
 ### Notebooks
@@ -50,7 +63,13 @@ in addition, the `ExactIntegrator` class can be used to generate the true trajec
 * [nn_integrator.py](src/nn_integrators/nn_integrator.py) Implementation of neural network based integrators. Both s-step methods and symplectic methods are implemented. The underlying keras models are either standard keral models networks (for the s-step integrators) or instances of the classes implemented in [models.py](src/nn_integrators/models.py).
 
 ## Testing
-A set of unit tests which can be run with `pytest` are collected in the directory `tests`.
+A set of unit tests are collected in the directory `tests` and can be run by invoking
+
+```
+pytest
+```
+
+in the main directory (note that the module has to be installed first, see above).
 
 ## Results
 The following plot show the position and the position error for the first pendulum in a system of two coupled pendulums. In the first row, the Verlet integrator for the exact Hamiltonian is run with a large timestep (marked *verlet coarse*). The second and third row show results for the neural network 6-step method with a dense network (marked *vanilla dense*) and LSTM network (marked *LSTM*) respectively. The final row is the Hamiltonian neural network integrator (marked *Hamiltonian*). 
