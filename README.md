@@ -15,14 +15,14 @@ In addition, for Hamiltonian systems the approach in [Greydanus et al. (2019)](h
 In all cases the neural network based integrators are trained by running a standard numerical integrator (for example the Verlet method) to generate ground truth trajectories. By starting from random initial conditions, this allows sampling the phase space.
 
 ### Automatic C-code generation
-Generating training samples can be expensive since it requires running the high-resolution training integrator for a large number of timesteps. To make this more efficient, C-code is automatically generated and run with the [ctypes library](https://docs.python.org/3/library/ctypes.html). For this, each dynamical system in [dynamical_system.py](src/nn_integrators/dynamical_system.py) contains C-code snippets for evaluating the derivative of the Hamiltonian. Inside the numerical time integrators in [time_integrator.py](src/nn_integrators/time_integrator.py) these snippets are the combined with C-wrapper code and compiled into a library, which is executed when the timestepper is run. For more details, see the `_generate_timestepper_library()` method in [time_integrator.py](src/nn_integrators/time_integrator.py), which might have to be adapted to compile the C-code on a particular system.
+Generating training samples can be expensive since it requires running the high-resolution training integrator for a large number of timesteps. To make this more efficient, C-code is automatically generated and run with the [ctypes library](https://docs.python.org/3/library/ctypes.html). For this, each dynamical system in [dynamical_system.py](src/nn_integrators/dynamical_system.py) contains C-code snippets for evaluating the derivative of the Hamiltonian. Inside the numerical time integrators in [time_integrator.py](src/nn_integrators/time_integrator.py) these snippets are then combined with C-wrapper code and compiled into a library, which is executed when the timestepper is run. For more details, see the `_generate_timestepper_library()` method in [time_integrator.py](src/nn_integrators/time_integrator.py), which might have to be adapted to compile the C-code on a particular system.
 
 ## Dynamical systems
 Currently, the following dynamical systems have been implemented:
 * a simple harmonic oscillator
 * a system of two coupled harmonic oscillators
 * the classical double pendulum
-* a system of two pendulums which are suspended from the ceiling and coupled with a spring that follows Hooke's law.
+* a system of two pendulums which are suspended from the ceiling and coupled with a spring that obeys Hooke's law.
 ![Dynamical systems](figures/DynamicalSystems.svg)
 
 ## Mathematical details
@@ -35,7 +35,7 @@ Running the Jupyter notebooks for training and evaluating the neural network int
 python -m pip install .
 ```
 
-If you want to edit the code, you might want prefer an editable install with
+If you want to edit the code, you might prefer to install in editable mode with
 
 ```
 python -m pip install --editable .
@@ -58,7 +58,7 @@ The top level code is collected in Jupyter notebooks in the [src](./src) directo
     - Strang splitting
     - RK4 (fourth order Runge-Kutta)
 in addition, the `ExactIntegrator` class can be used to generate the true trajectories of dynamical systems which have an exact solution.
-* [models.py](src/nn_integrators/models.py) tensorflow keras implementation of the map that steps the solution forward by one step, using a Hamiltonian neural network integrator. All models are derived from a base class `SymplecticModel`, which is a subclass of `keral.Model`. The `VerletModel` class assumes that the Hamiltonian is separable. Two neural networks represent the potential- and kinetic energy, and these are then used to construct a symplectic Verlet step. The `StrangSplittingModel` does not assume separability of the Hamiltonian, which is represented by a single neural network. An explicit symplectic integrator im extended phase space is constructed by used the ideas in [Tao (2016)](https://arxiv.org/abs/1609.02212).
+* [models.py](src/nn_integrators/models.py) Tensorflow keras implementation of the map that steps the solution forward by one step, using a Hamiltonian neural network integrator. All models are derived from a base class `SymplecticModel`, which is a subclass of `keral.Model`. The `VerletModel` class assumes that the Hamiltonian is separable. Two neural networks represent the potential- and kinetic energy, and these are then used to construct a symplectic Verlet step. The `StrangSplittingModel` does not assume separability of the Hamiltonian, which is represented by a single neural network. An explicit symplectic integrator im extended phase space is constructed by used the ideas in [Tao (2016)](https://arxiv.org/abs/1609.02212).
 * [data_generator.py](src/nn_integrators/data_generator.py) Implements a generator-based tensorflow dataset for generating training data. As explained above, this data is generated by running a high-resolution classical integrator which is initialised randomly to sample the phase space.
 * [nn_integrator.py](src/nn_integrators/nn_integrator.py) Implementation of neural network based integrators. Both s-step methods and symplectic methods are implemented. The underlying keras models are either standard keral models networks (for the s-step integrators) or instances of the classes implemented in [models.py](src/nn_integrators/models.py).
 
